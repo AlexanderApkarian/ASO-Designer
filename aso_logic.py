@@ -5,6 +5,12 @@ from typing import Literal
 
 
 CHEMISTRY_PRESETS = {
+    "Unmodified DNA": {
+        "gap_length": 20,
+        "wing_length": 0,
+        "wing_chemistry": "None",
+        "backbone_modification": "PO",
+    },
     "5-10-5 MOE/DNA": {
         "gap_length": 10,
         "wing_length": 5,
@@ -267,6 +273,10 @@ def chemistry_key(value: str) -> str:
         "3-10-3LNA": "3-10-3 LNA/DNA",
         "3-9-3LNA/DNA": "3-9-3 LNA/DNA",
         "3-9-3LNA": "3-9-3 LNA/DNA",
+        "UNMODIFIED": "Unmodified DNA",
+        "UNMODIFIEDDNA": "Unmodified DNA",
+        "PLAIN": "Unmodified DNA",
+        "PLAINDNA": "Unmodified DNA",
         "CUSTOM": "Custom",
     }
     return aliases.get(s, "")

@@ -51,6 +51,17 @@ class AsoLogicTests(unittest.TestCase):
         )
         self.assertEqual(code, "+A*/i2MOErC/mC*/32FU/")
 
+    def test_unmodified_dna_preset_uses_plain_dna_po_chemistry(self):
+        chemistry = resolve_chemistry(AsoInputs(aso_chemistry="Unmodified DNA"))
+
+        self.assertEqual(chemistry.aso_length, 20)
+        self.assertEqual(set(chemistry.base_modifications), {"DNA"})
+        self.assertEqual(set(chemistry.linkages), {"PO"})
+        self.assertEqual(
+            idt_aso_per_position("AUGCAUGCAUGCAUGCAUGC", chemistry.base_modifications, chemistry.linkages),
+            "ATGCATGCATGCATGCATGC",
+        )
+
     def test_kt777_preset_uses_mixed_linkages_and_5mec_gap(self):
         chemistry = resolve_chemistry(AsoInputs(aso_chemistry="KT777/valeriasen"))
         self.assertEqual(chemistry.aso_length, 20)
