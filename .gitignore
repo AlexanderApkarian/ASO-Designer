@@ -1,0 +1,21 @@
+# Python / local runtime
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local app build outputs
+build/
+dist/
+.pyinstaller_config/
+
+# Local machine noise
+.DS_Store
+.Rhistory
+
+# Generated user outputs
+*.xlsx
+*.xlsm
+*.csv
+aso_bubble_figure_*.png
+penalty_aso_visualisation_*.png
+chemistry_optimisation_bubble_figure_*.png
