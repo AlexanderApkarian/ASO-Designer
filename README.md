@@ -6,7 +6,7 @@ It keeps the spreadsheet's input model:
 
 - target gene, SNP identifier, and chemistry number
 - ASO chemistry preset or custom per-position chemistry pattern
-- insertion/deletion/substitution type, start position (first base = 0), and length
+- insertion/deletion/substitution type, start position (first base = 1), and length
 - RNA sequence entered 5' to 3'; hyphens are optional and ignored
 
 It produces the same core outputs:
@@ -45,14 +45,14 @@ python3 aso_designer.py \
   --chemistry-number C1 \
   --mutation-type Insertion \
   --mutation-length 1 \
-  --mutation-start 21 \
+  --mutation-start 22 \
   --rna-sequence AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA
 ```
 
 For long sequences, put the RNA in a text file and use:
 
 ```bash
-python3 aso_designer.py --export aso_output.xlsx --rna-file sequence.txt --mutation-type Deletion --mutation-length 4 --mutation-start 21
+python3 aso_designer.py --export aso_output.xlsx --rna-file sequence.txt --mutation-type Deletion --mutation-length 4 --mutation-start 22
 ```
 
 ## Notes

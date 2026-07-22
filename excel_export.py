@@ -15,6 +15,7 @@ from aso_logic import (
     IdtConversionRow,
     PenaltyAsoResult,
     chemistry_display_label,
+    header_display_positions_5to3,
     mutation_header_indexes,
     normalise_mutation_type,
 )
@@ -115,6 +116,7 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
     rna_row = 2
     first_data_row = 3
     grid_start_col = len(headers) + 2
+    display_positions = header_display_positions_5to3(result)
 
     for col, header in enumerate(headers, start=1):
         cell = ws.cell(row=table_header_row, column=col, value=header)
@@ -127,7 +129,7 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
     end_label_cell.alignment = Alignment(horizontal="center", vertical="center")
 
     highlighted_header_indexes = mutation_header_indexes(result)
-    for idx, pos in enumerate(result.header_positions, start=grid_start_col):
+    for idx, pos in enumerate(display_positions, start=grid_start_col):
         top = ws.cell(row=position_row, column=idx, value=pos)
         base = ws.cell(row=rna_row, column=idx, value=result.header_bases[idx - grid_start_col])
         for cell in (top, base):
@@ -180,7 +182,7 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
     }.items():
         ws.column_dimensions[col].width = width
     grid_end = grid_start_col + len(result.header_positions) - 1
-    grid_col_width = max(5, len(str(max(result.header_positions, default=1))) + 2)
+    grid_col_width = max(5, len(str(max(display_positions, default=1))) + 2)
     for idx in range(grid_start_col, grid_end + 1):
         ws.column_dimensions[get_column_letter(idx)].width = grid_col_width
 

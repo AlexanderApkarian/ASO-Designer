@@ -23,6 +23,7 @@ from aso_logic import (
     convert_sequences_to_idt,
     generate_design,
     generate_penalty_design,
+    header_display_positions_5to3,
     resolve_chemistry,
     mutation_header_indexes,
     normalise_mutation_type,
@@ -53,7 +54,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--backbone-modification", default="PS", choices=["PS", "PO", "MIXED", "None"])
     parser.add_argument("--mutation-type", default="Insertion", choices=["Insertion", "Deletion", "Substitution"])
     parser.add_argument("--mutation-length", type=int, default=1)
-    parser.add_argument("--mutation-start", type=int, default=21)
+    parser.add_argument("--mutation-start", type=int, default=22)
     parser.add_argument("--microwalk-step-size", type=int, default=1)
     parser.add_argument("--rna-sequence", default="")
     parser.add_argument("--rna-file", help="Read the RNA sequence from a text file.")
@@ -104,6 +105,8 @@ class AsoDesignerApp:
         self.vars: dict[str, tk.StringVar] = {}
         self.last_result = None
         self.show_bubble_base_letters = tk.BooleanVar(value=True)
+        self.show_bubble_rna_numbers = tk.BooleanVar(value=True)
+        self.show_bubble_aso_ids = tk.BooleanVar(value=True)
         self.show_chemopt_bubble_base_letters = tk.BooleanVar(value=True)
         self.show_penalty_bubble_base_letters = tk.BooleanVar(value=True)
         self.custom_base_modifications: tuple[str, ...] = ()
@@ -462,7 +465,7 @@ class AsoDesignerApp:
         row += 1
         self._entry(left, row, "Indel/Substitution Length", "mutation_length", "1")
         row += 1
-        self._entry(left, row, "Indel/Substitution Start Position (first base = 0)", "mutation_start", "21")
+        self._entry(left, row, "Indel/Substitution Start Position (first base = 1)", "mutation_start", "22")
         row += 1
         self._entry(left, row, "Microwalk Step Size", "microwalk_step_size", "1")
         row += 1
@@ -524,11 +527,23 @@ class AsoDesignerApp:
         bubble_toolbar.columnconfigure(0, weight=1)
         ttk.Checkbutton(
             bubble_toolbar,
+            text="Show RNA numbers",
+            variable=self.show_bubble_rna_numbers,
+            command=self._refresh_bubble_figure,
+        ).grid(row=0, column=1, sticky="e", padx=(0, 12))
+        ttk.Checkbutton(
+            bubble_toolbar,
+            text="Show ASO IDs",
+            variable=self.show_bubble_aso_ids,
+            command=self._refresh_bubble_figure,
+        ).grid(row=0, column=2, sticky="e", padx=(0, 12))
+        ttk.Checkbutton(
+            bubble_toolbar,
             text="Show base letters",
             variable=self.show_bubble_base_letters,
             command=self._refresh_bubble_figure,
-        ).grid(row=0, column=1, sticky="e", padx=(0, 12))
-        ttk.Button(bubble_toolbar, text="Save HD Image", command=self.save_bubble_figure_image).grid(row=0, column=2, sticky="e")
+        ).grid(row=0, column=3, sticky="e", padx=(0, 12))
+        ttk.Button(bubble_toolbar, text="Save HD Image", command=self.save_bubble_figure_image).grid(row=0, column=4, sticky="e")
         self.bubble_canvas = tk.Canvas(bubble_frame, background="#ffffff", highlightthickness=0)
         self.bubble_canvas.grid(row=1, column=0, sticky="nsew")
         bubble_y = ttk.Scrollbar(bubble_frame, orient="vertical", command=self.bubble_canvas.yview)
@@ -2529,10 +2544,11 @@ class AsoDesignerApp:
         canvas = self.alignment_canvas
         canvas.delete("all")
 
-        cell_w = max(34, 12 * len(str(max(result.header_positions, default=1))) + 14)
+        display_positions = header_display_positions_5to3(result)
+        cell_w = max(34, 12 * len(str(max(display_positions, default=1))) + 14)
         cell_h = 24
         max_label_chars = max(
-            [len("RNA 3' - 5'"), len("ASO sequences 5' - 3'"), len("pos")]
+            [len("RNA 3' - 5'"), len("ASO sequences 5' - 3'"), len("RNA pos")]
             + [len(row.aso_id) for row in result.rows]
         )
         label_w = max(180, max_label_chars * 8 + 24)
@@ -2540,9 +2556,9 @@ class AsoDesignerApp:
         top = 12
         highlighted_header_indexes = mutation_header_indexes(result)
 
-        self._draw_alignment_label(canvas, left, top, label_w, cell_h, "pos")
+        self._draw_alignment_label(canvas, left, top, label_w, cell_h, "RNA pos")
         self._draw_alignment_label(canvas, left, top + cell_h, label_w, cell_h, "RNA 3' - 5'")
-        for idx, position in enumerate(result.header_positions):
+        for idx, position in enumerate(display_positions):
             x = left + label_w + idx * cell_w
             self._draw_alignment_cell(canvas, x, top, cell_w, cell_h, str(position), "#e7e6e6", "#000000")
             if idx in highlighted_header_indexes:
@@ -2621,18 +2637,22 @@ class AsoDesignerApp:
         styles = self._bubble_styles()
         used_base_mods, used_linkages = self._bubble_used_modifications(result)
         show_letters = self._bubble_base_letters_visible()
+        show_numbers = self._bubble_rna_numbers_visible()
+        show_aso_ids = self._bubble_aso_ids_visible()
+        display_positions = header_display_positions_5to3(result)
 
         self._draw_bubble_canvas_label(canvas, layout["left_label_x"], layout["rna_y"], "RNA 3' - 5'")
-        for idx, position in enumerate(result.header_positions):
+        for idx, position in enumerate(display_positions):
             x = layout["grid_left"] + idx * layout["pitch"] + layout["radius"]
-            canvas.create_text(
-                x,
-                layout["position_y"],
-                text=str(position),
-                anchor="s",
-                font=("Menlo", 8),
-                fill="#111827",
-            )
+            if show_numbers:
+                canvas.create_text(
+                    x,
+                    layout["position_y"],
+                    text=str(position),
+                    anchor="s",
+                    font=("Menlo", 8),
+                    fill="#111827",
+                )
             self._draw_bubble_canvas_circle(
                 canvas,
                 x,
@@ -2652,7 +2672,8 @@ class AsoDesignerApp:
 
         for row in result.rows:
             y = layout["row_top"] + (row.row_number - 1) * layout["row_h"]
-            self._draw_bubble_canvas_label(canvas, layout["left_label_x"], y, row.aso_id, font_size=9)
+            if show_aso_ids:
+                self._draw_bubble_canvas_label(canvas, layout["left_label_x"], y, row.aso_id, font_size=9)
             drawn_centers: dict[int, tuple[float, float]] = {}
 
             for idx, grid_value in enumerate(row.grid_cells):
@@ -2733,11 +2754,10 @@ class AsoDesignerApp:
         radius = 12
         pitch = radius * 2
         row_h = 30
+        row_labels = [row.aso_id for row in result.rows] if self._bubble_aso_ids_visible() else []
         label_w = max(
             235,
-            max([len("RNA 3' - 5'"), len("ASO sequences 5' - 3'")] + [len(row.aso_id) for row in result.rows])
-            * 7
-            + 24,
+            max([len("RNA 3' - 5'"), len("ASO sequences 5' - 3'")] + [len(label) for label in row_labels]) * 7 + 24,
         )
         left = 14
         top = 16
@@ -2789,6 +2809,18 @@ class AsoDesignerApp:
 
     def _bubble_base_letters_visible(self) -> bool:
         variable = getattr(self, "show_bubble_base_letters", None)
+        if variable is None:
+            return True
+        return bool(variable.get())
+
+    def _bubble_rna_numbers_visible(self) -> bool:
+        variable = getattr(self, "show_bubble_rna_numbers", None)
+        if variable is None:
+            return True
+        return bool(variable.get())
+
+    def _bubble_aso_ids_visible(self) -> bool:
+        variable = getattr(self, "show_bubble_aso_ids", None)
         if variable is None:
             return True
         return bool(variable.get())
@@ -3193,6 +3225,9 @@ class AsoDesignerApp:
         used_base_mods, used_linkages = self._bubble_used_modifications(result)
         if show_letters is None:
             show_letters = self._bubble_base_letters_visible()
+        show_numbers = self._bubble_rna_numbers_visible()
+        show_aso_ids = self._bubble_aso_ids_visible()
+        display_positions = header_display_positions_5to3(result)
         scale = BUBBLE_EXPORT_SCALE
         width = int(layout["width"] * scale)
         height = int(layout["height"] * scale)
@@ -3273,9 +3308,10 @@ class AsoDesignerApp:
             draw.line(points + [points[0]], fill="#111827", width=max(1, s(1.3)))
 
         text_right(layout["left_label_x"], layout["rna_y"], "RNA 3' - 5'", label_font)
-        for idx, position in enumerate(result.header_positions):
+        for idx, position in enumerate(display_positions):
             x = layout["grid_left"] + idx * layout["pitch"] + layout["radius"]
-            text_center(x, layout["position_y"], str(position), pos_font)
+            if show_numbers:
+                text_center(x, layout["position_y"], str(position), pos_font)
             circle(
                 x,
                 layout["rna_y"],
@@ -3288,7 +3324,8 @@ class AsoDesignerApp:
         text_right(layout["left_label_x"], layout["direction_y"], "ASO sequences 5' - 3'", label_font)
         for row in result.rows:
             y = layout["row_top"] + (row.row_number - 1) * layout["row_h"]
-            text_right(layout["left_label_x"], y, row.aso_id, row_label_font)
+            if show_aso_ids:
+                text_right(layout["left_label_x"], y, row.aso_id, row_label_font)
             centers: dict[int, tuple[float, float]] = {}
             for idx, grid_value in enumerate(row.grid_cells):
                 if grid_value == "##":

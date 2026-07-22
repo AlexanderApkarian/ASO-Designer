@@ -14,7 +14,7 @@ class ExcelExportTests(unittest.TestCase):
             AsoInputs(
                 mutation_type="Insertion",
                 mutation_length=1,
-                mutation_start=21,
+                mutation_start=22,
                 rna_sequence="AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA",
             )
         )

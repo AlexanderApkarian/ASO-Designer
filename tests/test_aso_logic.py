@@ -13,6 +13,7 @@ from aso_logic import (
     complement_base,
     generate_design,
     generate_penalty_design,
+    header_display_positions_5to3,
     idt_aso_custom,
     idt_aso_per_position,
     mutation_header_indexes,
@@ -244,7 +245,7 @@ class AsoLogicTests(unittest.TestCase):
             AsoInputs(
                 mutation_type="Insertion",
                 mutation_length=1,
-                mutation_start=21,
+                mutation_start=22,
                 rna_sequence=sequence,
             )
         )
@@ -261,7 +262,7 @@ class AsoLogicTests(unittest.TestCase):
                 backbone_modification="PO",
                 mutation_type="Insertion",
                 mutation_length=1,
-                mutation_start=21,
+                mutation_start=22,
                 rna_sequence=sequence,
             )
         )
@@ -276,7 +277,7 @@ class AsoLogicTests(unittest.TestCase):
                 chemistry_number="C1",
                 mutation_type="Insertion",
                 mutation_length=1,
-                mutation_start=21,
+                mutation_start=22,
                 rna_sequence=sequence,
             )
         )
@@ -294,6 +295,10 @@ class AsoLogicTests(unittest.TestCase):
             mutation_header_indexes(result),
             {result.mutation_start_reversed - result.crop_start},
         )
+        self.assertEqual(
+            header_display_positions_5to3(result)[result.mutation_start_reversed - result.crop_start],
+            22,
+        )
 
     def test_variant_microwalk_can_skip_by_step_size(self):
         sequence = "AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA"
@@ -304,7 +309,7 @@ class AsoLogicTests(unittest.TestCase):
                 chemistry_number="C1",
                 mutation_type="Insertion",
                 mutation_length=1,
-                mutation_start=21,
+                mutation_start=22,
                 microwalk_step_size=2,
                 rna_sequence=sequence,
             )
@@ -320,13 +325,13 @@ class AsoLogicTests(unittest.TestCase):
         base_inputs = AsoInputs(
             mutation_type="Insertion",
             mutation_length=1,
-            mutation_start=21,
+            mutation_start=22,
             rna_sequence=sequence,
         )
         hyphenated_inputs = AsoInputs(
             mutation_type="Insertion",
             mutation_length=1,
-            mutation_start=21,
+            mutation_start=22,
             rna_sequence=hyphenated,
         )
 
@@ -345,7 +350,7 @@ class AsoLogicTests(unittest.TestCase):
             AsoInputs(
                 mutation_type="Substitution",
                 mutation_length=3,
-                mutation_start=20,
+                mutation_start=21,
                 rna_sequence=sequence,
             )
         )
@@ -358,7 +363,7 @@ class AsoLogicTests(unittest.TestCase):
             AsoInputs(
                 mutation_type="Deletion",
                 mutation_length=2,
-                mutation_start=21,
+                mutation_start=22,
                 rna_sequence=sequence,
             )
         )
@@ -375,12 +380,23 @@ class AsoLogicTests(unittest.TestCase):
             AsoInputs(
                 mutation_type="Deletion",
                 mutation_length=7,
-                mutation_start=21,
+                mutation_start=22,
                 rna_sequence=sequence,
             )
         )
         gap = next(row.display_spans[0] for row in result.rows if row.display_spans)
         self.assertEqual(gap.end - gap.start, 7)
+
+    def test_mutation_start_rejects_zero_with_one_based_message(self):
+        with self.assertRaisesRegex(ValueError, "first base = 1"):
+            generate_design(
+                AsoInputs(
+                    mutation_type="Insertion",
+                    mutation_length=1,
+                    mutation_start=0,
+                    rna_sequence="AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA",
+                )
+            )
 
 
 if __name__ == "__main__":

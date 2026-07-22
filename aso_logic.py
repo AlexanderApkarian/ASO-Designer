@@ -119,7 +119,7 @@ class AsoInputs:
     microwalk_step_size: int = 1
     mutation_type: str = "Insertion"
     mutation_length: int = 0
-    mutation_start: int = 0
+    mutation_start: int = 1
     rna_sequence: str = ""
 
 
@@ -1237,12 +1237,13 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
         mutation_length = int(inputs.mutation_length)
         mutation_start = int(inputs.mutation_start)
     except Exception as exc:
-        raise AsoInputError("Mutation length and start position (first base = 0) must be whole numbers.") from exc
+        raise AsoInputError("Mutation length and start position (first base = 1) must be whole numbers.") from exc
 
     if mutation_length < 0:
         raise AsoInputError("Mutation length must be non-negative.")
-    if mutation_start < 0:
-        raise AsoInputError("Mutation start position (first base = 0) must be non-negative.")
+    if mutation_start < 1:
+        raise AsoInputError("Mutation start position (first base = 1) must be at least 1.")
+    mutation_start_index = mutation_start - 1
 
     clean_reversed = reversed_clean_rna(inputs.rna_sequence)
     if not clean_reversed:
@@ -1250,17 +1251,17 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
     validate_base_sequence(clean_reversed)
 
     if mutation_type == "DELETION":
-        if mutation_start > len(clean_reversed):
+        if mutation_start_index > len(clean_reversed):
             raise AsoInputError("Deletion start is outside the cleaned RNA sequence.")
         variant_bases = 0
-        mutation_start_reversed = len(clean_reversed) - mutation_start
+        mutation_start_reversed = len(clean_reversed) - mutation_start_index
     else:
         if mutation_length == 0:
             raise AsoInputError("Insertion/substitution length must be greater than zero.")
-        if mutation_start + mutation_length > len(clean_reversed):
+        if mutation_start_index + mutation_length > len(clean_reversed):
             raise AsoInputError("Insertion/substitution span is outside the cleaned RNA sequence.")
         variant_bases = mutation_length
-        mutation_start_reversed = len(clean_reversed) - (mutation_start + mutation_length)
+        mutation_start_reversed = len(clean_reversed) - (mutation_start_index + mutation_length)
 
     aso_length = chemistry.aso_length
     if aso_length <= 0:
@@ -1281,7 +1282,7 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
     grid_width_status = "Grid width OK" if displayed_bases <= grid_warning_width else "EXTEND GRID FURTHER RIGHT"
 
     header_positions = tuple(range(1, displayed_bases + 1))
-    header_bases = tuple(clean_reversed[crop_start + pos - 1].lower() for pos in header_positions)
+    header_bases = tuple(clean_reversed[crop_start + pos - 1].upper() for pos in header_positions)
     rows: list[AsoRow] = []
 
     for row_number, row_start in enumerate(row_starts, start=1):
@@ -1355,6 +1356,13 @@ def mutation_header_indexes(result: AsoResult) -> set[int]:
         for idx, position in enumerate(result.header_positions)
         if start <= result.crop_start + position - 1 <= end
     }
+
+
+def header_display_positions_5to3(result: AsoResult) -> tuple[int, ...]:
+    return tuple(
+        len(result.clean_reversed_rna) - (result.crop_start + idx)
+        for idx, _position in enumerate(result.header_positions)
+    )
 
 
 def inputs_from_strings(**kwargs: str) -> AsoInputs:
