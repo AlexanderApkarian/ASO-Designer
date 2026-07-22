@@ -108,7 +108,7 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
         "ASO ID",
         "Sequence 5' to 3' with IDT Codes",
         "Highlighted Sequence 5' to 3'",
-        "Indel/Substitution Start Position",
+        "Variant Start Position",
         "Chemistry",
     ]
     table_header_row = 2

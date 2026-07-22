@@ -4,9 +4,9 @@ Standalone Python version of the ASO Design Template workbook.
 
 It keeps the spreadsheet's input model:
 
-- target gene, SNP identifier, and chemistry number
+- three flexible identifiers, for example gene, variant, and chemical modification pattern
 - ASO chemistry preset or custom per-position chemistry pattern
-- insertion/deletion/substitution type, start position (first base = 1), and length
+- variant type, start position (first base = 1), length, and step size
 - RNA sequence entered 5' to 3'; hyphens are optional and ignored
 
 It produces the same core outputs:

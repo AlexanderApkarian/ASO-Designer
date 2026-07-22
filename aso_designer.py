@@ -427,11 +427,11 @@ class AsoDesignerApp:
         title.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
         row += 1
 
-        self._entry(left, row, "Target Gene Name", "target_gene")
+        self._entry(left, row, "Identifier 1 (e.g., gene)", "target_gene")
         row += 1
-        self._entry(left, row, "SNP Identifier", "snp_identifier")
+        self._entry(left, row, "Identifier 2 (e.g., variant)", "snp_identifier")
         row += 1
-        self._entry(left, row, "Chemistry Identifier", "chemistry_number")
+        self._entry(left, row, "Identifier 3 (e.g., chemical modification pattern)", "chemistry_number")
         row += 1
 
         self.aso_chemistry_combo = self._combo(
@@ -461,13 +461,13 @@ class AsoDesignerApp:
 
         ttk.Separator(left).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
         row += 1
-        self._combo(left, row, "Mutation Type", "mutation_type", ["Insertion", "Deletion", "Substitution"], "Insertion")
+        self._combo(left, row, "Variant Type", "mutation_type", ["Insertion", "Deletion", "Substitution"], "Insertion")
         row += 1
-        self._entry(left, row, "Indel/Substitution Length", "mutation_length", "1")
+        self._entry(left, row, "Variant Length", "mutation_length", "1")
         row += 1
-        self._entry(left, row, "Indel/Substitution Start Position (first base = 1)", "mutation_start", "22")
+        self._entry(left, row, "Variant Start Position (first base = 1)", "mutation_start", "22")
         row += 1
-        self._entry(left, row, "Microwalk Step Size", "microwalk_step_size", "1")
+        self._entry(left, row, "Step Size", "microwalk_step_size", "1")
         row += 1
 
         ttk.Label(left, text="RNA 5' to 3' (hyphens optional)").grid(row=row, column=0, columnspan=2, sticky="w")
@@ -608,7 +608,7 @@ class AsoDesignerApp:
         self.chemopt_motif_status.grid(row=row, column=0, columnspan=2, sticky="w", pady=(6, 0))
         row += 1
 
-        self._entry(left, row, "Microwalk Step Size", "chemopt_step_size", "1")
+        self._entry(left, row, "Step Size", "chemopt_step_size", "1")
         row += 1
 
         ttk.Separator(left).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
@@ -855,11 +855,11 @@ class AsoDesignerApp:
         )
         row += 1
 
-        self._entry(left, row, "Target Gene Name", "penalty_target_gene")
+        self._entry(left, row, "Identifier 1 (e.g., gene)", "penalty_target_gene")
         row += 1
-        self._entry(left, row, "Target Identifier", "penalty_target_identifier")
+        self._entry(left, row, "Identifier 2 (e.g., variant)", "penalty_target_identifier")
         row += 1
-        self._entry(left, row, "Chemistry Identifier", "penalty_chemistry_number")
+        self._entry(left, row, "Identifier 3 (e.g., chemical modification pattern)", "penalty_chemistry_number")
         row += 1
 
         self.penalty_aso_chemistry_combo = self._combo(
@@ -915,7 +915,7 @@ class AsoDesignerApp:
         row += 1
         self._entry(left, row, "Number of Parent ASOs", "penalty_parent_count", "3")
         row += 1
-        self._entry(left, row, "Microwalk Step Size", "penalty_step_size", "1")
+        self._entry(left, row, "Step Size", "penalty_step_size", "1")
         row += 1
         self._combo(
             left,
@@ -2492,7 +2492,7 @@ class AsoDesignerApp:
             "ASO ID\t"
             "Sequence 5' to 3' with IDT Codes\t"
             "Highlighted Sequence 5' to 3'\t"
-            "Indel/Substitution Start Position\t"
+            "Variant Start Position\t"
             "Chemistry\n"
         )
         text.insert("end", headers, "table_header")
@@ -2514,7 +2514,7 @@ class AsoDesignerApp:
             ("Sequence 5' to 3' with IDT Codes", [row.idt_code for row in result.rows]),
             ("Highlighted Sequence 5' to 3'", [row.display_sequence for row in result.rows]),
             (
-                "Indel/Substitution Start Position",
+                "Variant Start Position",
                 [str(row.starting_position) for row in result.rows],
             ),
         ]
