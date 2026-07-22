@@ -277,16 +277,17 @@ class AsoLogicTests(unittest.TestCase):
                 chemistry_number="C1",
                 mutation_type="Insertion",
                 mutation_length=1,
-                mutation_start=22,
+                mutation_start=23,
                 rna_sequence=sequence,
             )
         )
         self.assertEqual(result.aso_length, 18)
-        self.assertEqual(result.mutation_start_reversed, len(sequence) - 22)
+        self.assertEqual(result.mutation_start_reversed, len(sequence) - 23)
         self.assertEqual(result.displayed_bases, 37)
         self.assertEqual(result.required_asos, 20)
         self.assertEqual(result.complete_required_asos, 20)
         self.assertEqual(result.coverage_warning, "")
+        self.assertEqual(result.ambiguity_warning, "")
         expected = "".join(
             complement_base(base)
             for base in result.clean_reversed_rna[result.crop_start : result.crop_start + result.aso_length]
@@ -299,7 +300,7 @@ class AsoLogicTests(unittest.TestCase):
         )
         self.assertEqual(
             header_display_positions_5to3(result)[result.mutation_start_reversed - result.crop_start],
-            22,
+            23,
         )
 
     def test_variant_microwalk_can_skip_by_step_size(self):
@@ -311,7 +312,7 @@ class AsoLogicTests(unittest.TestCase):
                 chemistry_number="C1",
                 mutation_type="Insertion",
                 mutation_length=1,
-                mutation_start=22,
+                mutation_start=23,
                 microwalk_step_size=2,
                 rna_sequence=sequence,
             )
@@ -363,6 +364,39 @@ class AsoLogicTests(unittest.TestCase):
         self.assertEqual(len(result.rows), 13)
         self.assertIn("Partial walk", result.coverage_warning)
         self.assertIn("Generated 13 of 21", result.coverage_warning)
+
+    def test_ambiguous_single_base_insertion_expands_across_repeat(self):
+        result = generate_design(
+            AsoInputs(
+                mutation_type="Insertion",
+                mutation_length=1,
+                mutation_start=27,
+                rna_sequence=("C" * 25) + "AA" + ("G" * 25),
+            )
+        )
+
+        self.assertEqual(result.mutation_start_reversed_options, (25, 26))
+        self.assertEqual(result.required_asos, 21)
+        self.assertEqual(result.complete_required_asos, 21)
+        self.assertEqual(len(mutation_header_indexes(result)), 2)
+        self.assertIn("Ambiguous insertion placement", result.ambiguity_warning)
+        self.assertIn("26-27", result.ambiguity_warning)
+        self.assertTrue(any(len(row.display_spans) == 1 for row in result.rows))
+
+    def test_ambiguous_insertion_step_size_keeps_each_possible_offset(self):
+        result = generate_design(
+            AsoInputs(
+                mutation_type="Insertion",
+                mutation_length=1,
+                mutation_start=27,
+                microwalk_step_size=2,
+                rna_sequence=("C" * 25) + "AA" + ("G" * 25),
+            )
+        )
+
+        self.assertEqual(result.required_asos, 20)
+        self.assertEqual([row.core_start for row in result.rows[:4]], [7, 8, 9, 10])
+        self.assertIn("Ambiguous insertion placement", result.ambiguity_warning)
 
     def test_substitution_header_highlight_spans_variant_bases(self):
         sequence = "AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA"

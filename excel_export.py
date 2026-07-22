@@ -18,6 +18,7 @@ from aso_logic import (
     header_display_positions_5to3,
     mutation_header_indexes,
     normalise_mutation_type,
+    variant_warning_text,
 )
 
 
@@ -117,10 +118,11 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
     first_data_row = 3
     grid_start_col = len(headers) + 2
     display_positions = header_display_positions_5to3(result)
+    warning_text = variant_warning_text(result)
 
-    if result.coverage_warning:
+    if warning_text:
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-        warning_cell = ws.cell(row=1, column=1, value=result.coverage_warning)
+        warning_cell = ws.cell(row=1, column=1, value=warning_text)
         warning_cell.font = Font(name="Arial", size=11, color="7A4F00")
         warning_cell.fill = PatternFill("solid", fgColor=LIGHT_YELLOW)
         warning_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -195,8 +197,8 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
 
     for row in range(1, first_data_row + len(result.rows)):
         ws.row_dimensions[row].height = 24
-    if result.coverage_warning:
-        ws.row_dimensions[1].height = 42
+    if warning_text:
+        ws.row_dimensions[1].height = 60 if "\n" in warning_text else 42
 
     last_data_row = first_data_row + len(result.rows) - 1
     for boundary in _alignment_boundaries(result):

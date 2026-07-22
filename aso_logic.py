@@ -162,6 +162,7 @@ class AsoResult:
     clean_reversed_rna: str
     aso_length: int
     mutation_start_reversed: int
+    mutation_start_reversed_options: tuple[int, ...]
     variant_bases: int
     crop_start: int
     crop_end: int
@@ -169,6 +170,7 @@ class AsoResult:
     required_asos: int
     complete_required_asos: int
     coverage_warning: str
+    ambiguity_warning: str
     grid_width_status: str
     header_positions: tuple[int, ...]
     header_bases: tuple[str, ...]
@@ -385,6 +387,43 @@ def clean_rna_for_reverse(raw: str) -> str:
 
 def reversed_clean_rna(raw: str) -> str:
     return clean_rna_for_reverse(raw)[::-1]
+
+
+def ambiguous_insertion_start_indexes(clean_forward_rna: str, start_index: int, insertion_length: int) -> tuple[int, ...]:
+    if insertion_length <= 0:
+        return (start_index,)
+
+    start = start_index
+    end = start_index + insertion_length
+    if start < 0 or end > len(clean_forward_rna):
+        return (start_index,)
+
+    leftmost = start
+    left_end = end
+    while leftmost > 0 and clean_forward_rna[leftmost - 1] == clean_forward_rna[left_end - 1]:
+        leftmost -= 1
+        left_end -= 1
+
+    rightmost = start
+    right_end = end
+    while right_end < len(clean_forward_rna) and clean_forward_rna[rightmost] == clean_forward_rna[right_end]:
+        rightmost += 1
+        right_end += 1
+
+    return tuple(range(leftmost, rightmost + 1))
+
+
+def _format_position_options_one_based(indexes: tuple[int, ...]) -> str:
+    positions = tuple(index + 1 for index in indexes)
+    if not positions:
+        return ""
+    if len(positions) == 1:
+        return str(positions[0])
+    if positions == tuple(range(positions[0], positions[-1] + 1)):
+        return f"{positions[0]}-{positions[-1]}"
+    if len(positions) <= 8:
+        return ", ".join(str(position) for position in positions)
+    return f"{positions[0]}-{positions[-1]} ({len(positions)} possible positions)"
 
 
 def normalise_mutation_type(value: str) -> str:
@@ -1204,6 +1243,7 @@ def _display_sequence(
     crop_start: int,
     row_start: int,
     aso_length: int,
+    mutation_start_reversed_options: tuple[int, ...] = (),
 ) -> tuple[str, tuple[DisplaySpan, ...]]:
     core_start = crop_start + row_start
     core_end = core_start + aso_length - 1
@@ -1218,15 +1258,30 @@ def _display_sequence(
             return text, (DisplaySpan(gap_pos, gap_pos + gap_width, "gap"),)
         return seq, ()
 
-    mut_start = mutation_start_reversed
-    mut_end = mutation_start_reversed + mutation_length - 1
-    overlap_start = max(core_start, mut_start)
-    overlap_end = min(core_end, mut_end)
-    if overlap_start <= overlap_end:
-        start = overlap_start - core_start
-        end = start + (overlap_end - overlap_start + 1)
-        return seq, (DisplaySpan(start, end, "mutation"),)
-    return seq, ()
+    spans: list[DisplaySpan] = []
+    for mut_start in mutation_start_reversed_options or (mutation_start_reversed,):
+        mut_end = mut_start + mutation_length - 1
+        overlap_start = max(core_start, mut_start)
+        overlap_end = min(core_end, mut_end)
+        if overlap_start <= overlap_end:
+            start = overlap_start - core_start
+            end = start + (overlap_end - overlap_start + 1)
+            spans.append(DisplaySpan(start, end, "mutation"))
+    return seq, _merge_display_spans(spans)
+
+
+def _merge_display_spans(spans: list[DisplaySpan]) -> tuple[DisplaySpan, ...]:
+    if not spans:
+        return ()
+
+    merged: list[DisplaySpan] = []
+    for span in sorted(spans, key=lambda item: (item.start, item.end)):
+        if not merged or span.start > merged[-1].end:
+            merged.append(span)
+            continue
+        previous = merged[-1]
+        merged[-1] = DisplaySpan(previous.start, max(previous.end, span.end), previous.kind)
+    return tuple(merged)
 
 
 def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResult:
@@ -1247,16 +1302,20 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
         raise AsoInputError("Mutation start position (first base = 1) must be at least 1.")
     mutation_start_index = mutation_start - 1
 
-    clean_reversed = reversed_clean_rna(inputs.rna_sequence)
+    clean_forward = clean_rna_for_reverse(inputs.rna_sequence)
+    clean_reversed = clean_forward[::-1]
     if not clean_reversed:
         raise AsoInputError("RNA sequence is empty after removing whitespace, hyphens, and underscores.")
     validate_base_sequence(clean_reversed)
 
+    insertion_start_options_forward: tuple[int, ...] = (mutation_start_index,)
+    ambiguity_warning = ""
     if mutation_type == "DELETION":
         if mutation_start_index > len(clean_reversed):
             raise AsoInputError("Deletion start is outside the cleaned RNA sequence.")
         variant_bases = 0
         mutation_start_reversed = len(clean_reversed) - mutation_start_index
+        mutation_start_reversed_options = (mutation_start_reversed,)
     else:
         if mutation_length == 0:
             raise AsoInputError("Insertion/substitution length must be greater than zero.")
@@ -1264,6 +1323,25 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
             raise AsoInputError("Insertion/substitution span is outside the cleaned RNA sequence.")
         variant_bases = mutation_length
         mutation_start_reversed = len(clean_reversed) - (mutation_start_index + mutation_length)
+        if mutation_type == "INSERTION":
+            insertion_start_options_forward = ambiguous_insertion_start_indexes(
+                clean_forward,
+                mutation_start_index,
+                mutation_length,
+            )
+            if len(insertion_start_options_forward) > 1:
+                ambiguity_warning = (
+                    "Ambiguous insertion placement: the inserted bases sit within a repeat, so the exact "
+                    "inserted copy cannot be uniquely numbered. The output includes the union of all possible "
+                    f"insertion start positions (first base = 1): "
+                    f"{_format_position_options_one_based(insertion_start_options_forward)}."
+                )
+        mutation_start_reversed_options = tuple(
+            sorted(
+                len(clean_reversed) - (start_index + mutation_length)
+                for start_index in insertion_start_options_forward
+            )
+        )
 
     aso_length = chemistry.aso_length
     if aso_length <= 0:
@@ -1275,17 +1353,37 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
     if microwalk_step < 1:
         raise AsoInputError("Step size must be at least 1.")
 
-    ideal_crop_start = mutation_start_reversed - aso_length
-    ideal_crop_end = mutation_start_reversed + variant_bases + aso_length - 1
+    ideal_windows = tuple(
+        (
+            start_reversed - aso_length,
+            start_reversed + variant_bases + aso_length - 1,
+        )
+        for start_reversed in mutation_start_reversed_options
+    )
+    ideal_crop_start = min(start for start, _end in ideal_windows)
+    ideal_crop_end = max(end for _start, end in ideal_windows)
     crop_start = max(0, ideal_crop_start)
     crop_end = min(len(clean_reversed) - 1, ideal_crop_end)
     displayed_bases = max(0, crop_end - crop_start + 1)
-    possible_asos = max(0, displayed_bases - aso_length + 1)
-    row_starts = tuple(range(0, possible_asos, microwalk_step))
+
+    absolute_row_starts: set[int] = set()
+    complete_absolute_row_starts: set[int] = set()
+    for ideal_start, ideal_end in ideal_windows:
+        complete_displayed = max(0, ideal_end - ideal_start + 1)
+        complete_possible = max(0, complete_displayed - aso_length + 1)
+        complete_absolute_row_starts.update(
+            ideal_start + offset for offset in range(0, complete_possible, microwalk_step)
+        )
+
+        clipped_start = max(0, ideal_start)
+        clipped_end = min(len(clean_reversed) - 1, ideal_end)
+        clipped_displayed = max(0, clipped_end - clipped_start + 1)
+        clipped_possible = max(0, clipped_displayed - aso_length + 1)
+        absolute_row_starts.update(clipped_start + offset for offset in range(0, clipped_possible, microwalk_step))
+
+    row_starts = tuple(start - crop_start for start in sorted(absolute_row_starts))
     required_asos = len(row_starts)
-    complete_displayed_bases = max(0, ideal_crop_end - ideal_crop_start + 1)
-    complete_possible_asos = max(0, complete_displayed_bases - aso_length + 1)
-    complete_required_asos = len(range(0, complete_possible_asos, microwalk_step))
+    complete_required_asos = len(complete_absolute_row_starts)
     coverage_warning = ""
     if (crop_start != ideal_crop_start or crop_end != ideal_crop_end) and required_asos < complete_required_asos:
         coverage_warning = (
@@ -1316,6 +1414,7 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
             crop_start,
             row_start,
             aso_length,
+            mutation_start_reversed_options,
         )
         aso_id = (
             f"{inputs.target_gene}_{inputs.snp_identifier}_{inputs.chemistry_number}_ASO_{row_number}"
@@ -1346,6 +1445,7 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
         clean_reversed_rna=clean_reversed,
         aso_length=aso_length,
         mutation_start_reversed=mutation_start_reversed,
+        mutation_start_reversed_options=mutation_start_reversed_options,
         variant_bases=variant_bases,
         crop_start=crop_start,
         crop_end=crop_end,
@@ -1353,6 +1453,7 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
         required_asos=required_asos,
         complete_required_asos=complete_required_asos,
         coverage_warning=coverage_warning,
+        ambiguity_warning=ambiguity_warning,
         grid_width_status=grid_width_status,
         header_positions=header_positions,
         header_bases=header_bases,
@@ -1365,13 +1466,16 @@ def mutation_header_indexes(result: AsoResult) -> set[int]:
     if mutation_type not in {"INSERTION", "SUBSTITUTION"}:
         return set()
 
-    start = result.mutation_start_reversed
-    end = start + int(result.inputs.mutation_length) - 1
-    return {
-        idx
-        for idx, position in enumerate(result.header_positions)
-        if start <= result.crop_start + position - 1 <= end
-    }
+    indexes: set[int] = set()
+    mutation_length = int(result.inputs.mutation_length)
+    for start in result.mutation_start_reversed_options or (result.mutation_start_reversed,):
+        end = start + mutation_length - 1
+        indexes.update(
+            idx
+            for idx, position in enumerate(result.header_positions)
+            if start <= result.crop_start + position - 1 <= end
+        )
+    return indexes
 
 
 def header_display_positions_5to3(result: AsoResult) -> tuple[int, ...]:
@@ -1379,6 +1483,10 @@ def header_display_positions_5to3(result: AsoResult) -> tuple[int, ...]:
         len(result.clean_reversed_rna) - (result.crop_start + idx)
         for idx, _position in enumerate(result.header_positions)
     )
+
+
+def variant_warning_text(result: AsoResult) -> str:
+    return "\n".join(message for message in (result.ambiguity_warning, result.coverage_warning) if message)
 
 
 def inputs_from_strings(**kwargs: str) -> AsoInputs:

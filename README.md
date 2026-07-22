@@ -58,6 +58,7 @@ python3 aso_designer.py --export aso_output.xlsx --rna-file sequence.txt --mutat
 ## Notes
 
 - The original workbook reverses the clean RNA sequence before microwalk generation. This app mirrors that behavior.
+- Insertions inside repeated sequence are treated as ambiguous; the app generates the union of ASOs for every equivalent insertion placement and flags the result.
 - If the supplied RNA is too short to generate the complete walk around the variant, the app returns every ASO it can design and flags the result as a partial walk.
 - IDT code generation supports the workbook gapmer presets plus per-position custom base modifications/linkages.
 - Choose `Custom` to open the bubble editor for DNA, DNA + 5MeC, LNA, MOE, 2'OMe, 2'F, and PS/PO linkages.

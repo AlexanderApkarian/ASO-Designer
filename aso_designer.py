@@ -29,6 +29,7 @@ from aso_logic import (
     normalise_mutation_type,
     split_base_modification,
     summarise_linkages,
+    variant_warning_text,
 )
 
 
@@ -2585,7 +2586,7 @@ class AsoDesignerApp:
         self._variant_render_token += 1
         render_token = self._variant_render_token
         self._variant_bubble_dirty = True
-        self._set_variant_warning(result.coverage_warning)
+        self._set_variant_warning(variant_warning_text(result))
 
         steps = (
             lambda: self._render_aso_table(result),
@@ -2610,8 +2611,9 @@ class AsoDesignerApp:
         text.delete("1.0", "end")
         text.configure(tabs=self._table_tab_stops(result))
 
-        if result.coverage_warning:
-            text.insert("end", result.coverage_warning + "\n\n", "table_warning")
+        warning_text = variant_warning_text(result)
+        if warning_text:
+            text.insert("end", warning_text + "\n\n", "table_warning")
 
         headers = (
             "ASO ID\t"

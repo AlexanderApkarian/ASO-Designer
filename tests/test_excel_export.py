@@ -66,6 +66,24 @@ class ExcelExportTests(unittest.TestCase):
         self.assertIn("Partial walk", ws["A1"].value)
         self.assertIn("Generated 13 of 21", ws["A1"].value)
 
+    def test_ambiguous_insertion_warning_is_exported(self):
+        result = generate_design(
+            AsoInputs(
+                mutation_type="Insertion",
+                mutation_length=1,
+                mutation_start=27,
+                rna_sequence=("C" * 25) + "AA" + ("G" * 25),
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = export_result_to_xlsx(result, Path(tmp) / "ambiguous_output.xlsx")
+            wb = load_workbook(output)
+            ws = wb["ASO Output"]
+
+        self.assertIn("Ambiguous insertion placement", ws["A1"].value)
+        self.assertIn("26-27", ws["A1"].value)
+
 
 if __name__ == "__main__":
     unittest.main()
