@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from aso_logic import (
@@ -123,6 +124,9 @@ class AsoDesignerApp:
         self.converter_custom_editor_window = None
         self.penalty_custom_editor_window = None
         self.chemopt_editor_window = None
+        self._home_click_times: dict[str, float] = {}
+        self._variant_bubble_dirty = False
+        self._variant_render_token = 0
 
         self._build_ui()
         self._apply_chemistry_preset()
@@ -255,7 +259,13 @@ class AsoDesignerApp:
         label.grid(row=1, column=0, sticky="ew")
 
         def open_tool(_event=None):
-            command()
+            now = time.monotonic()
+            last_click = self._home_click_times.get(title, 0.0)
+            if now - last_click < 0.35:
+                return "break"
+            self._home_click_times[title] = now
+            self.root.after_idle(command)
+            return "break"
 
         def highlight(_event=None):
             tile.configure(highlightbackground="#1f4e79")
@@ -265,6 +275,7 @@ class AsoDesignerApp:
 
         for widget in (tile, canvas, label):
             widget.bind("<Button-1>", open_tool)
+            widget.bind("<ButtonRelease-1>", open_tool)
             widget.bind("<Enter>", highlight)
             widget.bind("<Leave>", unhighlight)
 
@@ -460,6 +471,7 @@ class AsoDesignerApp:
         ttk.Button(button_row, text="Export Excel", command=self.export_excel).grid(row=0, column=1, sticky="ew")
 
         notebook = ttk.Notebook(right)
+        self.variant_notebook = notebook
         notebook.grid(row=0, column=0, sticky="nsew")
 
         results_frame = ttk.Frame(notebook)
@@ -491,9 +503,11 @@ class AsoDesignerApp:
         align_x.grid(row=1, column=0, sticky="ew")
 
         bubble_frame = ttk.Frame(notebook)
+        self.variant_bubble_frame = bubble_frame
         bubble_frame.rowconfigure(1, weight=1)
         bubble_frame.columnconfigure(0, weight=1)
         notebook.add(bubble_frame, text="Visualisation")
+        notebook.bind("<<NotebookTabChanged>>", lambda _event: self._render_variant_bubble_if_visible())
         bubble_toolbar = ttk.Frame(bubble_frame, padding=(0, 0, 0, 6))
         bubble_toolbar.grid(row=0, column=0, columnspan=2, sticky="ew")
         bubble_toolbar.columnconfigure(0, weight=1)
@@ -976,7 +990,26 @@ class AsoDesignerApp:
 
     def _refresh_bubble_figure(self) -> None:
         if self.last_result is not None:
-            self._render_bubble_figure(self.last_result)
+            self._variant_bubble_dirty = True
+            self._render_variant_bubble_if_visible()
+
+    def _variant_visualisation_is_selected(self) -> bool:
+        notebook = getattr(self, "variant_notebook", None)
+        bubble_frame = getattr(self, "variant_bubble_frame", None)
+        if notebook is None or bubble_frame is None:
+            return False
+        try:
+            return notebook.select() == str(bubble_frame)
+        except Exception:
+            return False
+
+    def _render_variant_bubble_if_visible(self) -> None:
+        if not self._variant_bubble_dirty or self.last_result is None:
+            return
+        if not self._variant_visualisation_is_selected():
+            return
+        self._variant_bubble_dirty = False
+        self._render_bubble_figure(self.last_result)
 
     def _combo(self, parent, row: int, label: str, name: str, values: list[str], value: str):
         ttk = self.ttk
@@ -2357,9 +2390,26 @@ class AsoDesignerApp:
         self._show_result(result)
 
     def _show_result(self, result) -> None:
-        self._render_aso_table(result)
-        self._render_alignment(result)
-        self._render_bubble_figure(result)
+        self._variant_render_token += 1
+        render_token = self._variant_render_token
+        self._variant_bubble_dirty = True
+
+        steps = (
+            lambda: self._render_aso_table(result),
+            lambda: self._render_alignment(result),
+            self._render_variant_bubble_if_visible,
+        )
+
+        def run_step(index: int = 0) -> None:
+            if render_token != self._variant_render_token:
+                return
+            if index >= len(steps):
+                return
+            steps[index]()
+            if index + 1 < len(steps):
+                self.root.after(1, lambda: run_step(index + 1))
+
+        self.root.after_idle(run_step)
 
     def _render_aso_table(self, result) -> None:
         text = self.table_text
