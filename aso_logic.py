@@ -823,7 +823,7 @@ def chemistry_optimization_walk(
         raise AsoInputError("Selected motif is wider than the central core.")
     step = int(step_size)
     if step < 1:
-        raise AsoInputError("Microwalk step size must be at least 1.")
+        raise AsoInputError("Step size must be at least 1.")
 
     motif_offsets = tuple(position - motif_start for position in motif)
     motif_modifications = tuple(base_mods[position] for position in motif)
@@ -1074,7 +1074,7 @@ def generate_penalty_design(inputs: PenaltyAsoInputs) -> PenaltyAsoResult:
     if parent_count < 1:
         raise AsoInputError("Number of parent ASOs must be at least 1.")
     if step < 1:
-        raise AsoInputError("Microwalk step size must be at least 1.")
+        raise AsoInputError("Step size must be at least 1.")
 
     max_start = len(clean_reversed) - aso_length
     if parent_start > max_start:
@@ -1269,9 +1269,9 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
     try:
         microwalk_step = int(inputs.microwalk_step_size)
     except Exception as exc:
-        raise AsoInputError("Microwalk step size must be a whole number.") from exc
+        raise AsoInputError("Step size must be a whole number.") from exc
     if microwalk_step < 1:
-        raise AsoInputError("Microwalk step size must be at least 1.")
+        raise AsoInputError("Step size must be at least 1.")
 
     crop_start = max(0, mutation_start_reversed - aso_length)
     crop_end = min(len(clean_reversed) - 1, mutation_start_reversed + variant_bases + aso_length - 1)

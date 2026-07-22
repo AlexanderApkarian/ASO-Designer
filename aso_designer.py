@@ -104,6 +104,8 @@ class AsoDesignerApp:
 
         self.vars: dict[str, tk.StringVar] = {}
         self.last_result = None
+        self._busy_depth = 0
+        self._busy_cursor_state: list[tuple[object, str]] = []
         self.show_bubble_base_letters = tk.BooleanVar(value=True)
         self.show_bubble_rna_numbers = tk.BooleanVar(value=True)
         self.show_bubble_aso_ids = tk.BooleanVar(value=True)
@@ -447,7 +449,11 @@ class AsoDesignerApp:
             lambda _event: self._defer_callback("variant_chemistry", self._on_chemistry_changed, 150),
         )
         row += 1
-        self.custom_button = ttk.Button(left, text="Edit Custom Pattern", command=self._open_custom_chemistry_editor)
+        self.custom_button = ttk.Button(
+            left,
+            text="Edit Custom Pattern",
+            command=lambda: self._run_with_busy(self._open_custom_chemistry_editor),
+        )
         self.custom_button.grid(row=row, column=1, sticky="ew", pady=3)
         row += 1
         self.gap_entry = self._entry(left, row, "Central Gap Length", "gap_length", "12")
@@ -594,7 +600,7 @@ class AsoDesignerApp:
         self.chemopt_custom_button = ttk.Button(
             left,
             text="Select Chemistry and Walk Motif",
-            command=self._open_chemopt_chemistry_editor,
+            command=lambda: self._run_with_busy(self._open_chemopt_chemistry_editor),
         )
         self.chemopt_custom_button.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(4, 3))
         row += 1
@@ -744,7 +750,7 @@ class AsoDesignerApp:
         self.converter_custom_button = ttk.Button(
             left,
             text="Edit Custom Pattern",
-            command=self._open_converter_custom_chemistry_editor,
+            command=lambda: self._run_with_busy(self._open_converter_custom_chemistry_editor),
         )
         self.converter_custom_button.grid(row=row, column=1, sticky="ew", pady=3)
         row += 1
@@ -882,7 +888,7 @@ class AsoDesignerApp:
         self.penalty_custom_button = ttk.Button(
             left,
             text="Edit Custom Pattern",
-            command=self._open_penalty_custom_chemistry_editor,
+            command=lambda: self._run_with_busy(self._open_penalty_custom_chemistry_editor),
         )
         self.penalty_custom_button.grid(row=row, column=1, sticky="ew", pady=3)
         row += 1
@@ -1031,7 +1037,7 @@ class AsoDesignerApp:
 
         def run_callback() -> None:
             self._deferred_callback_ids.pop(key, None)
-            callback()
+            self._run_with_busy(callback)
 
         self._deferred_callback_ids[key] = self.root.after(delay_ms, run_callback)
 
@@ -1043,6 +1049,52 @@ class AsoDesignerApp:
             self.root.after_cancel(pending_id)
         except Exception:
             pass
+
+    def _walk_widgets(self, widget):
+        yield widget
+        try:
+            children = widget.winfo_children()
+        except Exception:
+            children = ()
+        for child in children:
+            yield from self._walk_widgets(child)
+
+    def _begin_busy(self) -> None:
+        self._busy_depth += 1
+        if self._busy_depth > 1:
+            return
+
+        self._busy_cursor_state = []
+        for widget in self._walk_widgets(self.root):
+            try:
+                self._busy_cursor_state.append((widget, widget.cget("cursor")))
+                widget.configure(cursor="watch")
+            except self.tk.TclError:
+                continue
+        self.root.update_idletasks()
+
+    def _end_busy(self) -> None:
+        if self._busy_depth <= 0:
+            return
+
+        self._busy_depth -= 1
+        if self._busy_depth > 0:
+            return
+
+        for widget, cursor in self._busy_cursor_state:
+            try:
+                widget.configure(cursor=cursor)
+            except self.tk.TclError:
+                continue
+        self._busy_cursor_state = []
+        self.root.update_idletasks()
+
+    def _run_with_busy(self, callback):
+        self._begin_busy()
+        try:
+            return callback()
+        finally:
+            self._end_busy()
 
     def _entry(self, parent, row: int, label: str, name: str, value: str = ""):
         ttk = self.ttk
@@ -1072,7 +1124,7 @@ class AsoDesignerApp:
         if not self._variant_visualisation_is_selected():
             return
         self._variant_bubble_dirty = False
-        self._render_bubble_figure(self.last_result)
+        self._run_with_busy(lambda: self._render_bubble_figure(self.last_result))
 
     def _combo(self, parent, row: int, label: str, name: str, values: list[str], value: str):
         ttk = self.ttk
@@ -1643,27 +1695,31 @@ class AsoDesignerApp:
 
     def generate_chemistry_optimization(self) -> None:
         try:
-            label, base_mods, linkages, wing_len, gap_len = self._collect_chemopt_pattern()
+            self._begin_busy()
             try:
-                step_size = int(self.vars["chemopt_step_size"].get())
-            except Exception:
-                raise AsoInputError("Microwalk step size must be a whole number.")
-            rows = chemistry_optimization_walk(
-                self.chemopt_sequence_text.get("1.0", "end"),
-                base_mods,
-                linkages,
-                wing_len,
-                gap_len,
-                self.chemopt_motif_positions,
-                step_size,
-            )
+                label, base_mods, linkages, wing_len, gap_len = self._collect_chemopt_pattern()
+                try:
+                    step_size = int(self.vars["chemopt_step_size"].get())
+                except Exception:
+                    raise AsoInputError("Step size must be a whole number.")
+                rows = chemistry_optimization_walk(
+                    self.chemopt_sequence_text.get("1.0", "end"),
+                    base_mods,
+                    linkages,
+                    wing_len,
+                    gap_len,
+                    self.chemopt_motif_positions,
+                    step_size,
+                )
+                self.last_chemopt_rows = rows
+                self.last_chemopt_chemistry_label = label
+                self._render_chemopt_output(label, rows)
+                self._render_chemopt_bubble_figure(rows)
+            finally:
+                self._end_busy()
         except Exception as exc:
             self.messagebox.showerror(APP_NAME, str(exc))
             return
-        self.last_chemopt_rows = rows
-        self.last_chemopt_chemistry_label = label
-        self._render_chemopt_output(label, rows)
-        self._render_chemopt_bubble_figure(rows)
 
     def _render_chemopt_output(self, chemistry_label: str, rows) -> None:
         text = self.chemopt_output_text
@@ -1745,7 +1801,7 @@ class AsoDesignerApp:
 
     def _refresh_chemopt_bubble_figure(self) -> None:
         if self.last_chemopt_rows:
-            self._render_chemopt_bubble_figure(self.last_chemopt_rows)
+            self._run_with_busy(lambda: self._render_chemopt_bubble_figure(self.last_chemopt_rows))
 
     def _chemopt_bubble_base_letters_visible(self) -> bool:
         variable = getattr(self, "show_chemopt_bubble_base_letters", None)
@@ -1913,7 +1969,11 @@ class AsoDesignerApp:
         if not path:
             return
         try:
-            self._save_chemopt_bubble_figure_png(self.last_chemopt_rows, Path(path))
+            self._begin_busy()
+            try:
+                self._save_chemopt_bubble_figure_png(self.last_chemopt_rows, Path(path))
+            finally:
+                self._end_busy()
         except ModuleNotFoundError as exc:
             if exc.name == "PIL":
                 self.messagebox.showerror(
@@ -2146,27 +2206,31 @@ class AsoDesignerApp:
         )
 
     def convert_idt_notation(self) -> None:
-        conversion = self._build_idt_conversion(show_errors=True)
-        if conversion is None:
-            return
-        chemistry, rows = conversion
-        self.last_idt_conversion_chemistry = chemistry
-        self.last_idt_conversion_rows = rows
-        self._render_idt_conversion_output(chemistry, rows)
+        try:
+            self._begin_busy()
+            try:
+                chemistry, rows = self._build_idt_conversion_or_raise()
+                self.last_idt_conversion_chemistry = chemistry
+                self.last_idt_conversion_rows = rows
+                self._render_idt_conversion_output(chemistry, rows)
+            finally:
+                self._end_busy()
+        except Exception as exc:
+            self.messagebox.showerror(APP_NAME, str(exc))
 
     def _build_idt_conversion(self, *, show_errors: bool = True):
         try:
-            chemistry = resolve_chemistry(self._collect_converter_chemistry_inputs())
+            return self._build_idt_conversion_or_raise()
         except Exception as exc:
             if show_errors:
                 self.messagebox.showerror(APP_NAME, str(exc))
             return None
 
+    def _build_idt_conversion_or_raise(self):
+        chemistry = resolve_chemistry(self._collect_converter_chemistry_inputs())
         rows = convert_sequences_to_idt(self.idt_sequence_text.get("1.0", "end"), chemistry)
         if not rows:
-            if show_errors:
-                self.messagebox.showerror(APP_NAME, "Enter at least one ASO sequence to convert.")
-            return None
+            raise AsoInputError("Enter at least one ASO sequence to convert.")
         return chemistry, rows
 
     def _render_idt_conversion_output(self, chemistry, rows) -> None:
@@ -2204,13 +2268,18 @@ class AsoDesignerApp:
         return tuple(tab_positions)
 
     def export_idt_converter_excel(self) -> None:
-        conversion = self._build_idt_conversion(show_errors=True)
-        if conversion is None:
+        try:
+            self._begin_busy()
+            try:
+                chemistry, rows = self._build_idt_conversion_or_raise()
+                self.last_idt_conversion_chemistry = chemistry
+                self.last_idt_conversion_rows = rows
+                self._render_idt_conversion_output(chemistry, rows)
+            finally:
+                self._end_busy()
+        except Exception as exc:
+            self.messagebox.showerror(APP_NAME, str(exc))
             return
-        chemistry, rows = conversion
-        self.last_idt_conversion_chemistry = chemistry
-        self.last_idt_conversion_rows = rows
-        self._render_idt_conversion_output(chemistry, rows)
 
         path = self.filedialog.asksaveasfilename(
             title="Export IDT notation workbook",
@@ -2221,9 +2290,13 @@ class AsoDesignerApp:
         if not path:
             return
         try:
-            from excel_export import export_idt_conversion_to_xlsx
+            self._begin_busy()
+            try:
+                from excel_export import export_idt_conversion_to_xlsx
 
-            output = export_idt_conversion_to_xlsx(rows, chemistry, path)
+                output = export_idt_conversion_to_xlsx(rows, chemistry, path)
+            finally:
+                self._end_busy()
         except Exception as exc:
             self.messagebox.showerror(APP_NAME, str(exc))
             return
@@ -2324,14 +2397,18 @@ class AsoDesignerApp:
 
     def generate_penalty_design(self, show_errors: bool = True) -> None:
         try:
-            result = generate_penalty_design(self._collect_penalty_inputs())
+            self._begin_busy()
+            try:
+                result = generate_penalty_design(self._collect_penalty_inputs())
+                self.last_penalty_result = result
+                self._render_penalty_output(result)
+                self._render_penalty_bubble_figure(result)
+            finally:
+                self._end_busy()
         except Exception as exc:
             if show_errors:
                 self.messagebox.showerror(APP_NAME, str(exc))
             return
-        self.last_penalty_result = result
-        self._render_penalty_output(result)
-        self._render_penalty_bubble_figure(result)
 
     def _render_penalty_output(self, result) -> None:
         text = self.penalty_output_text
@@ -2419,9 +2496,13 @@ class AsoDesignerApp:
         if not path:
             return
         try:
-            from excel_export import export_penalty_design_to_xlsx
+            self._begin_busy()
+            try:
+                from excel_export import export_penalty_design_to_xlsx
 
-            output = export_penalty_design_to_xlsx(self.last_penalty_result, path)
+                output = export_penalty_design_to_xlsx(self.last_penalty_result, path)
+            finally:
+                self._end_busy()
         except Exception as exc:
             self.messagebox.showerror(APP_NAME, str(exc))
             return
@@ -2452,7 +2533,11 @@ class AsoDesignerApp:
 
     def calculate(self, show_errors: bool = True) -> None:
         try:
-            result = generate_design(self._collect_inputs())
+            self._begin_busy()
+            try:
+                result = generate_design(self._collect_inputs())
+            finally:
+                self._end_busy()
         except Exception as exc:
             if show_errors:
                 self.messagebox.showerror(APP_NAME, str(exc))
@@ -2476,7 +2561,7 @@ class AsoDesignerApp:
                 return
             if index >= len(steps):
                 return
-            steps[index]()
+            self._run_with_busy(steps[index])
             if index + 1 < len(steps):
                 self.root.after(1, lambda: run_step(index + 1))
 
@@ -2853,7 +2938,7 @@ class AsoDesignerApp:
 
     def _refresh_penalty_bubble_figure(self) -> None:
         if self.last_penalty_result is not None:
-            self._render_penalty_bubble_figure(self.last_penalty_result)
+            self._run_with_busy(lambda: self._render_penalty_bubble_figure(self.last_penalty_result))
 
     def _penalty_bubble_base_letters_visible(self) -> bool:
         variable = getattr(self, "show_penalty_bubble_base_letters", None)
@@ -3202,7 +3287,11 @@ class AsoDesignerApp:
         if not path:
             return
         try:
-            self._save_bubble_figure_png(self.last_result, Path(path))
+            self._begin_busy()
+            try:
+                self._save_bubble_figure_png(self.last_result, Path(path))
+            finally:
+                self._end_busy()
         except ModuleNotFoundError as exc:
             if exc.name == "PIL":
                 self.messagebox.showerror(
@@ -3381,7 +3470,11 @@ class AsoDesignerApp:
         if not path:
             return
         try:
-            self._save_penalty_bubble_figure_png(self.last_penalty_result, Path(path))
+            self._begin_busy()
+            try:
+                self._save_penalty_bubble_figure_png(self.last_penalty_result, Path(path))
+            finally:
+                self._end_busy()
         except ModuleNotFoundError as exc:
             if exc.name == "PIL":
                 self.messagebox.showerror(
@@ -3629,9 +3722,13 @@ class AsoDesignerApp:
         if not path:
             return
         try:
-            from excel_export import export_result_to_xlsx
+            self._begin_busy()
+            try:
+                from excel_export import export_result_to_xlsx
 
-            output = export_result_to_xlsx(self.last_result, path)
+                output = export_result_to_xlsx(self.last_result, path)
+            finally:
+                self._end_busy()
         except Exception as exc:
             self.messagebox.showerror(APP_NAME, str(exc))
             return
