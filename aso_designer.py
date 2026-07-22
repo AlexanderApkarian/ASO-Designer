@@ -125,6 +125,7 @@ class AsoDesignerApp:
         self.penalty_custom_editor_window = None
         self.chemopt_editor_window = None
         self._home_click_times: dict[str, float] = {}
+        self._deferred_callback_ids: dict[str, str] = {}
         self._variant_bubble_dirty = False
         self._variant_render_token = 0
 
@@ -430,8 +431,18 @@ class AsoDesignerApp:
         self._entry(left, row, "Chemistry Identifier", "chemistry_number")
         row += 1
 
-        self._combo(left, row, "ASO Chemistry", "aso_chemistry", list(CHEMISTRY_PRESETS), DEFAULT_CHEMISTRY)
-        self.vars["aso_chemistry"].trace_add("write", lambda *_: self._on_chemistry_changed())
+        self.aso_chemistry_combo = self._combo(
+            left,
+            row,
+            "ASO Chemistry",
+            "aso_chemistry",
+            list(CHEMISTRY_PRESETS),
+            DEFAULT_CHEMISTRY,
+        )
+        self.aso_chemistry_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._defer_callback("variant_chemistry", self._on_chemistry_changed, 150),
+        )
         row += 1
         self.custom_button = ttk.Button(left, text="Edit Custom Pattern", command=self._open_custom_chemistry_editor)
         self.custom_button.grid(row=row, column=1, sticky="ew", pady=3)
@@ -698,7 +709,7 @@ class AsoDesignerApp:
         )
         row += 1
 
-        self._combo(
+        self.converter_aso_chemistry_combo = self._combo(
             left,
             row,
             "ASO Chemistry",
@@ -706,7 +717,14 @@ class AsoDesignerApp:
             list(CHEMISTRY_PRESETS),
             DEFAULT_CHEMISTRY,
         )
-        self.vars["converter_aso_chemistry"].trace_add("write", lambda *_: self._on_converter_chemistry_changed())
+        self.converter_aso_chemistry_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._defer_callback(
+                "converter_chemistry",
+                self._on_converter_chemistry_changed,
+                150,
+            ),
+        )
         row += 1
         self.converter_custom_button = ttk.Button(
             left,
@@ -829,7 +847,7 @@ class AsoDesignerApp:
         self._entry(left, row, "Chemistry Identifier", "penalty_chemistry_number")
         row += 1
 
-        self._combo(
+        self.penalty_aso_chemistry_combo = self._combo(
             left,
             row,
             "ASO Chemistry",
@@ -837,7 +855,14 @@ class AsoDesignerApp:
             list(CHEMISTRY_PRESETS),
             DEFAULT_CHEMISTRY,
         )
-        self.vars["penalty_aso_chemistry"].trace_add("write", lambda *_: self._on_penalty_chemistry_changed())
+        self.penalty_aso_chemistry_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._defer_callback(
+                "penalty_chemistry",
+                self._on_penalty_chemistry_changed,
+                150,
+            ),
+        )
         row += 1
         self.penalty_custom_button = ttk.Button(
             left,
@@ -980,6 +1005,29 @@ class AsoDesignerApp:
         self.penalty_bubble_canvas.configure(yscrollcommand=penalty_bubble_y.set, xscrollcommand=penalty_bubble_x.set)
         penalty_bubble_y.grid(row=1, column=1, sticky="ns")
         penalty_bubble_x.grid(row=2, column=0, sticky="ew")
+
+    def _defer_callback(self, key: str, callback, delay_ms: int = 0) -> None:
+        pending_id = self._deferred_callback_ids.pop(key, None)
+        if pending_id is not None:
+            try:
+                self.root.after_cancel(pending_id)
+            except Exception:
+                pass
+
+        def run_callback() -> None:
+            self._deferred_callback_ids.pop(key, None)
+            callback()
+
+        self._deferred_callback_ids[key] = self.root.after(delay_ms, run_callback)
+
+    def _cancel_deferred_callback(self, key: str) -> None:
+        pending_id = self._deferred_callback_ids.pop(key, None)
+        if pending_id is None:
+            return
+        try:
+            self.root.after_cancel(pending_id)
+        except Exception:
+            pass
 
     def _entry(self, parent, row: int, label: str, name: str, value: str = ""):
         ttk = self.ttk
@@ -1394,7 +1442,9 @@ class AsoDesignerApp:
     def _on_chemistry_changed(self) -> None:
         self._apply_chemistry_preset()
         if self.vars["aso_chemistry"].get() == "Custom":
-            self.root.after(80, self._open_custom_chemistry_editor)
+            self._defer_callback("variant_custom_editor", self._open_custom_chemistry_editor, 250)
+        else:
+            self._cancel_deferred_callback("variant_custom_editor")
 
     def _apply_chemistry_preset(self) -> None:
         label = self.vars["aso_chemistry"].get()
@@ -1503,7 +1553,9 @@ class AsoDesignerApp:
     def _on_chemopt_chemistry_changed(self) -> None:
         self._apply_chemopt_chemistry_preset()
         if self.vars["chemopt_aso_chemistry"].get() == "Custom":
-            self.root.after(80, self._open_chemopt_chemistry_editor)
+            self._defer_callback("chemopt_custom_editor", self._open_chemopt_chemistry_editor, 250)
+        else:
+            self._cancel_deferred_callback("chemopt_custom_editor")
 
     def _apply_chemopt_chemistry_preset(self) -> None:
         label = self.vars["chemopt_aso_chemistry"].get()
@@ -2038,7 +2090,9 @@ class AsoDesignerApp:
     def _on_converter_chemistry_changed(self) -> None:
         self._apply_converter_chemistry_preset()
         if self.vars["converter_aso_chemistry"].get() == "Custom":
-            self.root.after(80, self._open_converter_custom_chemistry_editor)
+            self._defer_callback("converter_custom_editor", self._open_converter_custom_chemistry_editor, 250)
+        else:
+            self._cancel_deferred_callback("converter_custom_editor")
 
     def _apply_converter_chemistry_preset(self) -> None:
         label = self.vars["converter_aso_chemistry"].get()
@@ -2201,7 +2255,9 @@ class AsoDesignerApp:
     def _on_penalty_chemistry_changed(self) -> None:
         self._apply_penalty_chemistry_preset()
         if self.vars["penalty_aso_chemistry"].get() == "Custom":
-            self.root.after(80, self._open_penalty_custom_chemistry_editor)
+            self._defer_callback("penalty_custom_editor", self._open_penalty_custom_chemistry_editor, 250)
+        else:
+            self._cancel_deferred_callback("penalty_custom_editor")
 
     def _apply_penalty_chemistry_preset(self) -> None:
         if "penalty_aso_chemistry" not in self.vars:
