@@ -430,11 +430,11 @@ class AsoDesignerApp:
         title.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 8))
         row += 1
 
-        self._entry(left, row, "Identifier 1 (e.g., gene)", "target_gene")
+        self._entry(left, row, "Identifier 1", "target_gene")
         row += 1
-        self._entry(left, row, "Identifier 2 (e.g., variant)", "snp_identifier")
+        self._entry(left, row, "Identifier 2", "snp_identifier")
         row += 1
-        self._entry(left, row, "Identifier 3 (e.g., chemical modification pattern)", "chemistry_number")
+        self._entry(left, row, "Identifier 3", "chemistry_number")
         row += 1
 
         self.aso_chemistry_combo = self._combo(
@@ -879,11 +879,11 @@ class AsoDesignerApp:
         )
         row += 1
 
-        self._entry(left, row, "Identifier 1 (e.g., gene)", "penalty_target_gene")
+        self._entry(left, row, "Identifier 1", "penalty_target_gene")
         row += 1
-        self._entry(left, row, "Identifier 2 (e.g., variant)", "penalty_target_identifier")
+        self._entry(left, row, "Identifier 2", "penalty_target_identifier")
         row += 1
-        self._entry(left, row, "Identifier 3 (e.g., chemical modification pattern)", "penalty_chemistry_number")
+        self._entry(left, row, "Identifier 3", "penalty_chemistry_number")
         row += 1
 
         self.penalty_aso_chemistry_combo = self._combo(
