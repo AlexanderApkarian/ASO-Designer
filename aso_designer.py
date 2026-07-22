@@ -476,7 +476,14 @@ class AsoDesignerApp:
         self._entry(left, row, "Step Size", "microwalk_step_size", "1")
         row += 1
 
-        ttk.Label(left, text="RNA 5' to 3' (hyphens optional)").grid(row=row, column=0, columnspan=2, sticky="w")
+        ttk.Label(left, text="RNA 5' to 3'").grid(row=row, column=0, columnspan=2, sticky="w")
+        row += 1
+        ttk.Label(
+            left,
+            text="Spaces, hyphens, and underscores can mark a deletion/gap; they are ignored when positions are counted.",
+            foreground="#4b5563",
+            wraplength=330,
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
         row += 1
         self.sequence_text = tk.Text(left, width=44, height=12, wrap="word", font=("Menlo", 11))
         self.sequence_text.grid(row=row, column=0, columnspan=2, sticky="nsew")
@@ -489,6 +496,15 @@ class AsoDesignerApp:
         button_row.columnconfigure(1, weight=1)
         ttk.Button(button_row, text="Calculate", command=self.calculate).grid(row=0, column=0, sticky="ew", padx=(0, 6))
         ttk.Button(button_row, text="Export Excel", command=self.export_excel).grid(row=0, column=1, sticky="ew")
+        row += 1
+        self.variant_warning_label = ttk.Label(
+            left,
+            text="",
+            foreground="#9a6700",
+            wraplength=330,
+        )
+        self.variant_warning_label.grid(row=row, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.variant_warning_label.grid_remove()
 
         notebook = ttk.Notebook(right)
         self.variant_notebook = notebook
@@ -502,6 +518,7 @@ class AsoDesignerApp:
         self.table_text = tk.Text(results_frame, wrap="none", font=("Menlo", 11), undo=False)
         self.table_text.configure(tabs=("160", "520", "760", "1020"))
         self.table_text.tag_configure("table_header", background="#1f4e79", foreground="#ffffff")
+        self.table_text.tag_configure("table_warning", background="#fff2cc", foreground="#7a4f00")
         self.table_text.tag_configure("display_mutation", foreground="#c00000")
         table_y = ttk.Scrollbar(results_frame, orient="vertical", command=self.table_text.yview)
         table_x = ttk.Scrollbar(results_frame, orient="horizontal", command=self.table_text.xview)
@@ -946,7 +963,14 @@ class AsoDesignerApp:
 
         ttk.Separator(left).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
         row += 1
-        ttk.Label(left, text="RNA 5' to 3' (hyphens optional)").grid(row=row, column=0, columnspan=2, sticky="w")
+        ttk.Label(left, text="RNA 5' to 3'").grid(row=row, column=0, columnspan=2, sticky="w")
+        row += 1
+        ttk.Label(
+            left,
+            text="Spaces, hyphens, and underscores are ignored when positions are counted.",
+            foreground="#4b5563",
+            wraplength=330,
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
         row += 1
         self.penalty_sequence_text = tk.Text(left, width=44, height=10, wrap="word", font=("Menlo", 11))
         self.penalty_sequence_text.grid(row=row, column=0, columnspan=2, sticky="nsew")
@@ -2531,6 +2555,17 @@ class AsoDesignerApp:
             rna_sequence=self.sequence_text.get("1.0", "end").strip(),
         )
 
+    def _set_variant_warning(self, message: str) -> None:
+        label = getattr(self, "variant_warning_label", None)
+        if label is None:
+            return
+        if message:
+            label.configure(text=message)
+            label.grid()
+        else:
+            label.configure(text="")
+            label.grid_remove()
+
     def calculate(self, show_errors: bool = True) -> None:
         try:
             self._begin_busy()
@@ -2539,6 +2574,7 @@ class AsoDesignerApp:
             finally:
                 self._end_busy()
         except Exception as exc:
+            self._set_variant_warning("")
             if show_errors:
                 self.messagebox.showerror(APP_NAME, str(exc))
             return
@@ -2549,6 +2585,7 @@ class AsoDesignerApp:
         self._variant_render_token += 1
         render_token = self._variant_render_token
         self._variant_bubble_dirty = True
+        self._set_variant_warning(result.coverage_warning)
 
         steps = (
             lambda: self._render_aso_table(result),
@@ -2572,6 +2609,9 @@ class AsoDesignerApp:
         text.configure(state="normal")
         text.delete("1.0", "end")
         text.configure(tabs=self._table_tab_stops(result))
+
+        if result.coverage_warning:
+            text.insert("end", result.coverage_warning + "\n\n", "table_warning")
 
         headers = (
             "ASO ID\t"

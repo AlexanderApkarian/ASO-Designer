@@ -167,6 +167,8 @@ class AsoResult:
     crop_end: int
     displayed_bases: int
     required_asos: int
+    complete_required_asos: int
+    coverage_warning: str
     grid_width_status: str
     header_positions: tuple[int, ...]
     header_bases: tuple[str, ...]
@@ -376,7 +378,7 @@ def chemistry_display_label(chemistry: ChemistrySettings) -> str:
 
 def clean_rna_for_reverse(raw: str) -> str:
     s = str(raw).lower()
-    for old in ("-", " ", "\t", "\r", "\n"):
+    for old in ("-", "_", " ", "\t", "\r", "\n"):
         s = s.replace(old, "")
     return s
 
@@ -565,7 +567,7 @@ def build_gapmer_pattern(
 def validate_base_sequence(seq: str) -> None:
     bad = sorted({b for b in seq.upper() if b not in "ACGTU"})
     if bad:
-        raise AsoInputError("RNA sequence must contain only A/C/G/T/U, whitespace, or hyphens.")
+        raise AsoInputError("RNA sequence must contain only A/C/G/T/U, whitespace, hyphens, or underscores.")
 
 
 def complement_base(base: str) -> str:
@@ -1054,7 +1056,7 @@ def generate_penalty_design(inputs: PenaltyAsoInputs) -> PenaltyAsoResult:
 
     clean_reversed = reversed_clean_rna(inputs.rna_sequence)
     if not clean_reversed:
-        raise AsoInputError("RNA sequence is empty after removing whitespace and hyphens.")
+        raise AsoInputError("RNA sequence is empty after removing whitespace, hyphens, and underscores.")
     validate_base_sequence(clean_reversed)
 
     aso_length = chemistry.aso_length
@@ -1247,7 +1249,7 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
 
     clean_reversed = reversed_clean_rna(inputs.rna_sequence)
     if not clean_reversed:
-        raise AsoInputError("RNA sequence is empty after removing whitespace and hyphens.")
+        raise AsoInputError("RNA sequence is empty after removing whitespace, hyphens, and underscores.")
     validate_base_sequence(clean_reversed)
 
     if mutation_type == "DELETION":
@@ -1273,12 +1275,24 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
     if microwalk_step < 1:
         raise AsoInputError("Step size must be at least 1.")
 
-    crop_start = max(0, mutation_start_reversed - aso_length)
-    crop_end = min(len(clean_reversed) - 1, mutation_start_reversed + variant_bases + aso_length - 1)
+    ideal_crop_start = mutation_start_reversed - aso_length
+    ideal_crop_end = mutation_start_reversed + variant_bases + aso_length - 1
+    crop_start = max(0, ideal_crop_start)
+    crop_end = min(len(clean_reversed) - 1, ideal_crop_end)
     displayed_bases = max(0, crop_end - crop_start + 1)
     possible_asos = max(0, displayed_bases - aso_length + 1)
     row_starts = tuple(range(0, possible_asos, microwalk_step))
     required_asos = len(row_starts)
+    complete_displayed_bases = max(0, ideal_crop_end - ideal_crop_start + 1)
+    complete_possible_asos = max(0, complete_displayed_bases - aso_length + 1)
+    complete_required_asos = len(range(0, complete_possible_asos, microwalk_step))
+    coverage_warning = ""
+    if (crop_start != ideal_crop_start or crop_end != ideal_crop_end) and required_asos < complete_required_asos:
+        coverage_warning = (
+            "Partial walk: the supplied RNA sequence does not include enough flanking context to generate "
+            f"the complete set. Generated {required_asos} of {complete_required_asos} possible "
+            f"{aso_length}-mer ASOs. Add more RNA sequence on either side of the variant to generate the full walk."
+        )
     grid_width_status = "Grid width OK" if displayed_bases <= grid_warning_width else "EXTEND GRID FURTHER RIGHT"
 
     header_positions = tuple(range(1, displayed_bases + 1))
@@ -1337,6 +1351,8 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
         crop_end=crop_end,
         displayed_bases=displayed_bases,
         required_asos=required_asos,
+        complete_required_asos=complete_required_asos,
+        coverage_warning=coverage_warning,
         grid_width_status=grid_width_status,
         header_positions=header_positions,
         header_bases=header_bases,

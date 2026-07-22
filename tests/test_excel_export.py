@@ -4,6 +4,8 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
+from openpyxl import load_workbook
+
 from aso_logic import AsoInputs, generate_design
 from excel_export import export_result_to_xlsx
 
@@ -44,6 +46,25 @@ class ExcelExportTests(unittest.TestCase):
             self.assertIsNotNone(size)
             self.assertEqual(font.get("val"), "Arial")
             self.assertEqual(size.get("val"), "12")
+
+    def test_partial_walk_warning_is_exported(self):
+        result = generate_design(
+            AsoInputs(
+                aso_chemistry="KT777/valeriasen",
+                mutation_type="Deletion",
+                mutation_length=1,
+                mutation_start=17,
+                rna_sequence=("A" * 16) + "_" + ("C" * 16),
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = export_result_to_xlsx(result, Path(tmp) / "partial_output.xlsx")
+            wb = load_workbook(output)
+            ws = wb["ASO Output"]
+
+        self.assertIn("Partial walk", ws["A1"].value)
+        self.assertIn("Generated 13 of 21", ws["A1"].value)
 
 
 if __name__ == "__main__":

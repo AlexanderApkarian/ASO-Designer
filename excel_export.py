@@ -118,6 +118,13 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
     grid_start_col = len(headers) + 2
     display_positions = header_display_positions_5to3(result)
 
+    if result.coverage_warning:
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+        warning_cell = ws.cell(row=1, column=1, value=result.coverage_warning)
+        warning_cell.font = Font(name="Arial", size=11, color="7A4F00")
+        warning_cell.fill = PatternFill("solid", fgColor=LIGHT_YELLOW)
+        warning_cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
     for col, header in enumerate(headers, start=1):
         cell = ws.cell(row=table_header_row, column=col, value=header)
         cell.font = Font(name="Arial", size=12, color=BLACK)
@@ -188,6 +195,8 @@ def export_result_to_xlsx(result: AsoResult, output_path: str | Path) -> Path:
 
     for row in range(1, first_data_row + len(result.rows)):
         ws.row_dimensions[row].height = 24
+    if result.coverage_warning:
+        ws.row_dimensions[1].height = 42
 
     last_data_row = first_data_row + len(result.rows) - 1
     for boundary in _alignment_boundaries(result):

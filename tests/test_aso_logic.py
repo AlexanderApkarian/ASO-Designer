@@ -285,6 +285,8 @@ class AsoLogicTests(unittest.TestCase):
         self.assertEqual(result.mutation_start_reversed, len(sequence) - 22)
         self.assertEqual(result.displayed_bases, 37)
         self.assertEqual(result.required_asos, 20)
+        self.assertEqual(result.complete_required_asos, 20)
+        self.assertEqual(result.coverage_warning, "")
         expected = "".join(
             complement_base(base)
             for base in result.clean_reversed_rna[result.crop_start : result.crop_start + result.aso_length]
@@ -319,30 +321,48 @@ class AsoLogicTests(unittest.TestCase):
         self.assertEqual([row.row_number for row in result.rows[:4]], [1, 2, 3, 4])
         self.assertTrue(result.rows[1].aso_id.endswith("_ASO_2"))
 
-    def test_rna_hyphens_are_ignored(self):
+    def test_rna_gap_markers_are_ignored(self):
         sequence = "AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA"
-        hyphenated = "AUGC-UACGUAUGCUACGUAUG-GCAUCGUAUGCUACGUAUGCUACGUA"
+        marked = "AUGC-UACGUAUGCUACGUAUG_GCAU CGUAUGCUACGUAUGCUACGUA"
         base_inputs = AsoInputs(
             mutation_type="Insertion",
             mutation_length=1,
             mutation_start=22,
             rna_sequence=sequence,
         )
-        hyphenated_inputs = AsoInputs(
+        marked_inputs = AsoInputs(
             mutation_type="Insertion",
             mutation_length=1,
             mutation_start=22,
-            rna_sequence=hyphenated,
+            rna_sequence=marked,
         )
 
         plain_result = generate_design(base_inputs)
-        hyphenated_result = generate_design(hyphenated_inputs)
+        marked_result = generate_design(marked_inputs)
 
-        self.assertEqual(hyphenated_result.clean_reversed_rna, plain_result.clean_reversed_rna)
+        self.assertEqual(marked_result.clean_reversed_rna, plain_result.clean_reversed_rna)
         self.assertEqual(
-            [row.clean_sequence for row in hyphenated_result.rows],
+            [row.clean_sequence for row in marked_result.rows],
             [row.clean_sequence for row in plain_result.rows],
         )
+
+    def test_short_flanking_context_flags_partial_walk(self):
+        result = generate_design(
+            AsoInputs(
+                aso_chemistry="KT777/valeriasen",
+                mutation_type="Deletion",
+                mutation_length=1,
+                mutation_start=17,
+                rna_sequence=("A" * 16) + "_" + ("C" * 16),
+            )
+        )
+
+        self.assertEqual(result.aso_length, 20)
+        self.assertEqual(result.required_asos, 13)
+        self.assertEqual(result.complete_required_asos, 21)
+        self.assertEqual(len(result.rows), 13)
+        self.assertIn("Partial walk", result.coverage_warning)
+        self.assertIn("Generated 13 of 21", result.coverage_warning)
 
     def test_substitution_header_highlight_spans_variant_bases(self):
         sequence = "AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA"
