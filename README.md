@@ -58,6 +58,7 @@ python3 aso_designer.py --export aso_output.xlsx --rna-file sequence.txt --mutat
 ## Notes
 
 - The original workbook reverses the clean RNA sequence before microwalk generation. This app mirrors that behavior.
+- Variant microwalk output is limited to ASOs that span the variant or deletion junction, so non-allele-specific flanking ASOs are not included.
 - Insertions inside repeated sequence are treated as ambiguous; the app generates the union of ASOs for every equivalent insertion placement and flags the result.
 - If the supplied RNA is too short to generate the complete walk around the variant, the app returns every ASO it can design and flags the result as a partial walk.
 - IDT code generation supports the workbook gapmer presets plus per-position custom base modifications/linkages.

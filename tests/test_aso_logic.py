@@ -284,15 +284,18 @@ class AsoLogicTests(unittest.TestCase):
         self.assertEqual(result.aso_length, 18)
         self.assertEqual(result.mutation_start_reversed, len(sequence) - 23)
         self.assertEqual(result.displayed_bases, 37)
-        self.assertEqual(result.required_asos, 20)
-        self.assertEqual(result.complete_required_asos, 20)
+        self.assertEqual(result.required_asos, 18)
+        self.assertEqual(result.complete_required_asos, 18)
         self.assertEqual(result.coverage_warning, "")
         self.assertEqual(result.ambiguity_warning, "")
         expected = "".join(
             complement_base(base)
-            for base in result.clean_reversed_rna[result.crop_start : result.crop_start + result.aso_length]
+            for base in result.clean_reversed_rna[result.rows[0].core_start : result.rows[0].core_start + result.aso_length]
         )
         self.assertEqual(result.rows[0].clean_sequence, expected)
+        self.assertTrue(
+            all(row.core_start <= result.mutation_start_reversed <= row.core_end for row in result.rows)
+        )
         self.assertTrue(any(span.kind == "mutation" for row in result.rows for span in row.display_spans))
         self.assertEqual(
             mutation_header_indexes(result),
@@ -317,8 +320,8 @@ class AsoLogicTests(unittest.TestCase):
                 rna_sequence=sequence,
             )
         )
-        self.assertEqual(result.required_asos, 10)
-        self.assertEqual([row.starting_position for row in result.rows[:4]], [0, 2, 4, 6])
+        self.assertEqual(result.required_asos, 9)
+        self.assertEqual([row.starting_position for row in result.rows[:4]], [1, 3, 5, 7])
         self.assertEqual([row.row_number for row in result.rows[:4]], [1, 2, 3, 4])
         self.assertTrue(result.rows[1].aso_id.endswith("_ASO_2"))
 
@@ -360,10 +363,13 @@ class AsoLogicTests(unittest.TestCase):
 
         self.assertEqual(result.aso_length, 20)
         self.assertEqual(result.required_asos, 13)
-        self.assertEqual(result.complete_required_asos, 21)
+        self.assertEqual(result.complete_required_asos, 19)
         self.assertEqual(len(result.rows), 13)
+        self.assertTrue(
+            all(row.core_start < result.mutation_start_reversed <= row.core_end for row in result.rows)
+        )
         self.assertIn("Partial walk", result.coverage_warning)
-        self.assertIn("Generated 13 of 21", result.coverage_warning)
+        self.assertIn("Generated 13 of 19", result.coverage_warning)
 
     def test_ambiguous_single_base_insertion_expands_across_repeat(self):
         result = generate_design(
@@ -376,8 +382,8 @@ class AsoLogicTests(unittest.TestCase):
         )
 
         self.assertEqual(result.mutation_start_reversed_options, (25, 26))
-        self.assertEqual(result.required_asos, 21)
-        self.assertEqual(result.complete_required_asos, 21)
+        self.assertEqual(result.required_asos, 19)
+        self.assertEqual(result.complete_required_asos, 19)
         self.assertEqual(len(mutation_header_indexes(result)), 2)
         self.assertIn("Ambiguous insertion placement", result.ambiguity_warning)
         self.assertIn("26-27", result.ambiguity_warning)
@@ -394,8 +400,8 @@ class AsoLogicTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result.required_asos, 20)
-        self.assertEqual([row.core_start for row in result.rows[:4]], [7, 8, 9, 10])
+        self.assertEqual(result.required_asos, 18)
+        self.assertEqual([row.core_start for row in result.rows[:4]], [8, 9, 10, 11])
         self.assertIn("Ambiguous insertion placement", result.ambiguity_warning)
 
     def test_substitution_header_highlight_spans_variant_bases(self):

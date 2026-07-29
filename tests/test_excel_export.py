@@ -64,7 +64,7 @@ class ExcelExportTests(unittest.TestCase):
             ws = wb["ASO Output"]
 
         self.assertIn("Partial walk", ws["A1"].value)
-        self.assertIn("Generated 13 of 21", ws["A1"].value)
+        self.assertIn("Generated 13 of 19", ws["A1"].value)
 
     def test_ambiguous_insertion_warning_is_exported(self):
         result = generate_design(

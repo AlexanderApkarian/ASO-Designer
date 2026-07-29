@@ -1284,6 +1284,19 @@ def _merge_display_spans(spans: list[DisplaySpan]) -> tuple[DisplaySpan, ...]:
     return tuple(merged)
 
 
+def _allele_specific_row_start_bounds(
+    mutation_type: str,
+    mutation_start_reversed: int,
+    variant_bases: int,
+    aso_length: int,
+) -> tuple[int, int]:
+    if mutation_type == "DELETION":
+        return mutation_start_reversed - aso_length + 1, mutation_start_reversed - 1
+
+    mutation_end_reversed = mutation_start_reversed + variant_bases - 1
+    return mutation_start_reversed - aso_length + 1, mutation_end_reversed
+
+
 def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResult:
     chemistry = resolve_chemistry(inputs)
     mutation_type = normalise_mutation_type(inputs.mutation_type)
@@ -1368,18 +1381,22 @@ def generate_design(inputs: AsoInputs, grid_warning_width: int = 123) -> AsoResu
 
     absolute_row_starts: set[int] = set()
     complete_absolute_row_starts: set[int] = set()
-    for ideal_start, ideal_end in ideal_windows:
-        complete_displayed = max(0, ideal_end - ideal_start + 1)
-        complete_possible = max(0, complete_displayed - aso_length + 1)
-        complete_absolute_row_starts.update(
-            ideal_start + offset for offset in range(0, complete_possible, microwalk_step)
+    for start_reversed in mutation_start_reversed_options:
+        row_start_min, row_start_max = _allele_specific_row_start_bounds(
+            mutation_type,
+            start_reversed,
+            variant_bases,
+            aso_length,
         )
+        if row_start_min > row_start_max:
+            continue
 
-        clipped_start = max(0, ideal_start)
-        clipped_end = min(len(clean_reversed) - 1, ideal_end)
-        clipped_displayed = max(0, clipped_end - clipped_start + 1)
-        clipped_possible = max(0, clipped_displayed - aso_length + 1)
-        absolute_row_starts.update(clipped_start + offset for offset in range(0, clipped_possible, microwalk_step))
+        complete_absolute_row_starts.update(range(row_start_min, row_start_max + 1, microwalk_step))
+
+        clipped_start = max(0, row_start_min)
+        clipped_end = min(len(clean_reversed) - aso_length, row_start_max)
+        if clipped_start <= clipped_end:
+            absolute_row_starts.update(range(clipped_start, clipped_end + 1, microwalk_step))
 
     row_starts = tuple(start - crop_start for start in sorted(absolute_row_starts))
     required_asos = len(row_starts)
