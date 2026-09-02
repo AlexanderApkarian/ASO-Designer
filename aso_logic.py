@@ -114,6 +114,7 @@ class AsoInputs:
     wing_length: int = 3
     wing_chemistry: str = "LNA"
     backbone_modification: str = "PS"
+    methyl_c_gap: bool | None = None
     custom_base_modifications: tuple[str, ...] = ()
     custom_linkages: tuple[str, ...] = ()
     microwalk_step_size: int = 1
@@ -206,6 +207,7 @@ class PenaltyAsoInputs:
     wing_length: int = 3
     wing_chemistry: str = "LNA"
     backbone_modification: str = "PS"
+    methyl_c_gap: bool | None = None
     custom_base_modifications: tuple[str, ...] = ()
     custom_linkages: tuple[str, ...] = ()
     parent_start: int = 0
@@ -294,6 +296,12 @@ def _coerce_string_tuple(value: tuple[str, ...] | list[str] | str) -> tuple[str,
     return tuple(str(part) for part in value)
 
 
+def _resolve_methyl_c_gap_override(value: bool | None, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    return bool(value)
+
+
 def resolve_chemistry(inputs: AsoInputs) -> ChemistrySettings:
     label = chemistry_key(inputs.aso_chemistry)
     if not label:
@@ -305,7 +313,7 @@ def resolve_chemistry(inputs: AsoInputs) -> ChemistrySettings:
         wing_length = int(preset["wing_length"])
         wing_chemistry = str(preset["wing_chemistry"])
         backbone_modification = str(preset["backbone_modification"])
-        methyl_c = bool(preset.get("methyl_c", False))
+        methyl_c = _resolve_methyl_c_gap_override(inputs.methyl_c_gap, bool(preset.get("methyl_c", False)))
         linkage_pattern = str(preset.get("linkage_pattern", ""))
         base_modifications, linkages = build_gapmer_pattern(
             gap_length,
@@ -320,7 +328,7 @@ def resolve_chemistry(inputs: AsoInputs) -> ChemistrySettings:
         wing_length = int(inputs.wing_length)
         wing_chemistry = inputs.wing_chemistry
         backbone_modification = inputs.backbone_modification
-        methyl_c = False
+        methyl_c = _resolve_methyl_c_gap_override(inputs.methyl_c_gap)
         linkage_pattern = ""
         custom_base_modifications = _coerce_string_tuple(inputs.custom_base_modifications)
         custom_linkages = _coerce_string_tuple(inputs.custom_linkages)
@@ -345,6 +353,7 @@ def resolve_chemistry(inputs: AsoInputs) -> ChemistrySettings:
                 wing_length,
                 wing_chemistry,
                 backbone_modification,
+                methyl_c=methyl_c,
             )
 
     if gap_length < 0 or wing_length < 0:
@@ -365,8 +374,9 @@ def resolve_chemistry(inputs: AsoInputs) -> ChemistrySettings:
 
 def chemistry_display_label(chemistry: ChemistrySettings) -> str:
     backbone_label = f"{chemistry.backbone_modification} backbone modification"
+    methyl_label = ", 5MeC in DNA gap" if chemistry.methyl_c else ""
     if chemistry.label == "KT777/valeriasen":
-        return f"{chemistry.label}, 5-10-5 MOE/DNA, {backbone_label}, 5MeC C bases"
+        return f"{chemistry.label}, 5-10-5 MOE/DNA, {backbone_label}{methyl_label}"
     if chemistry.label == "Custom":
         if chemistry.gap_length == 0 and chemistry.wing_length == 0:
             return f"Custom, {chemistry.aso_length}-base custom pattern, {backbone_label}"
@@ -374,8 +384,8 @@ def chemistry_display_label(chemistry: ChemistrySettings) -> str:
             f"{chemistry.wing_length}-{chemistry.gap_length}-{chemistry.wing_length} "
             f"{chemistry.wing_chemistry}/DNA"
         )
-        return f"Custom, {custom_label}, {backbone_label}"
-    return f"{chemistry.label}, {backbone_label}"
+        return f"Custom, {custom_label}, {backbone_label}{methyl_label}"
+    return f"{chemistry.label}, {backbone_label}{methyl_label}"
 
 
 def clean_rna_for_reverse(raw: str) -> str:
@@ -601,6 +611,30 @@ def build_gapmer_pattern(
 
     linkage = "PS" if backbone_key == "PS" else "PO"
     return base_modifications, tuple([linkage] * (len(base_modifications) - 1))
+
+
+def set_dna_gap_methylation(
+    base_modifications: tuple[str, ...] | list[str],
+    wing_length: int,
+    gap_length: int,
+    methyl_c: bool,
+) -> tuple[str, ...]:
+    mods = [normalise_base_modification(modification) for modification in base_modifications]
+    if any(not modification for modification in mods):
+        raise AsoInputError("Base modifications include an unrecognised option.")
+
+    wing_len = int(wing_length)
+    gap_len = int(gap_length)
+    if wing_len < 0 or gap_len < 0:
+        raise AsoInputError("Gap length and wing length must be non-negative.")
+    if wing_len * 2 + gap_len != len(mods):
+        return tuple(mods)
+
+    for index in range(wing_len, wing_len + gap_len):
+        ribose_mod, _base_mod = split_base_modification(mods[index])
+        if ribose_mod == "DNA":
+            mods[index] = combine_base_modification("DNA", "5MeC" if methyl_c else "None")
+    return tuple(mods)
 
 
 def validate_base_sequence(seq: str) -> None:
@@ -1088,6 +1122,7 @@ def generate_penalty_design(inputs: PenaltyAsoInputs) -> PenaltyAsoResult:
             wing_length=inputs.wing_length,
             wing_chemistry=inputs.wing_chemistry,
             backbone_modification=inputs.backbone_modification,
+            methyl_c_gap=inputs.methyl_c_gap,
             custom_base_modifications=inputs.custom_base_modifications,
             custom_linkages=inputs.custom_linkages,
         )

@@ -8,6 +8,7 @@ from aso_logic import (
     AsoInputs,
     PenaltyAsoInputs,
     chemistry_optimization_walk,
+    chemistry_display_label,
     combine_base_modification,
     convert_sequences_to_idt,
     complement_base,
@@ -73,6 +74,27 @@ class AsoLogicTests(unittest.TestCase):
         code = idt_aso_per_position("AAAAACCCCCAAAAACCCCC", chemistry.base_modifications, chemistry.linkages)
         self.assertEqual(code.count("*"), 13)
         self.assertIn("/iMe-dC/", code)
+
+    def test_methyl_c_gap_can_be_toggled_for_gapmer_presets(self):
+        methylated_lna = resolve_chemistry(AsoInputs(aso_chemistry="3-12-3 LNA/DNA", methyl_c_gap=True))
+        self.assertEqual(set(methylated_lna.base_modifications[3:15]), {"DNA + 5MeC"})
+        self.assertIn("5MeC in DNA gap", chemistry_display_label(methylated_lna))
+        methylated_lna_code = idt_aso_per_position(
+            "AAACCCCCCCCCCCCAAA",
+            methylated_lna.base_modifications,
+            methylated_lna.linkages,
+        )
+        self.assertIn("/iMe-dC/", methylated_lna_code)
+
+        plain_kt777 = resolve_chemistry(AsoInputs(aso_chemistry="KT777/valeriasen", methyl_c_gap=False))
+        self.assertEqual(set(plain_kt777.base_modifications[5:15]), {"DNA"})
+        self.assertNotIn("5MeC", chemistry_display_label(plain_kt777))
+        plain_kt777_code = idt_aso_per_position(
+            "CCCCCCCCCCCCCCCCCCCC",
+            plain_kt777.base_modifications,
+            plain_kt777.linkages,
+        )
+        self.assertNotIn("/iMe-dC/", plain_kt777_code)
 
     def test_convert_sequences_to_idt_handles_multiline_input(self):
         chemistry = resolve_chemistry(AsoInputs(aso_chemistry="3-10-3 LNA/DNA"))

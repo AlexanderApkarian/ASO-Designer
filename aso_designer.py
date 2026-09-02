@@ -27,6 +27,7 @@ from aso_logic import (
     resolve_chemistry,
     mutation_header_indexes,
     normalise_mutation_type,
+    set_dna_gap_methylation,
     split_base_modification,
     summarise_linkages,
     variant_warning_text,
@@ -53,6 +54,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--wing-length", type=int, default=3)
     parser.add_argument("--wing-chemistry", default="LNA", choices=list(RIBOSE_MODIFICATION_OPTIONS) + ["None"])
     parser.add_argument("--backbone-modification", default="PS", choices=["PS", "PO", "MIXED", "None"])
+    parser.add_argument(
+        "--methyl-c-gap",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Turn 5MeC on or off for C bases in the central DNA gap.",
+    )
     parser.add_argument("--mutation-type", default="Insertion", choices=["Insertion", "Deletion", "Substitution"])
     parser.add_argument("--mutation-length", type=int, default=1)
     parser.add_argument("--mutation-start", type=int, default=22)
@@ -80,6 +87,7 @@ def inputs_from_args(args: argparse.Namespace) -> AsoInputs:
         wing_length=args.wing_length,
         wing_chemistry=args.wing_chemistry,
         backbone_modification=args.backbone_modification,
+        methyl_c_gap=args.methyl_c_gap,
         mutation_type=args.mutation_type,
         mutation_length=args.mutation_length,
         mutation_start=args.mutation_start,
@@ -112,6 +120,10 @@ class AsoDesignerApp:
         self.show_bubble_aso_ids = tk.BooleanVar(value=True)
         self.show_chemopt_bubble_base_letters = tk.BooleanVar(value=True)
         self.show_penalty_bubble_base_letters = tk.BooleanVar(value=True)
+        self.variant_methyl_c_gap = tk.BooleanVar(value=False)
+        self.converter_methyl_c_gap = tk.BooleanVar(value=False)
+        self.penalty_methyl_c_gap = tk.BooleanVar(value=False)
+        self.chemopt_methyl_c_gap = tk.BooleanVar(value=False)
         self.custom_base_modifications: tuple[str, ...] = ()
         self.custom_linkages: tuple[str, ...] = ()
         self.converter_custom_base_modifications: tuple[str, ...] = ()
@@ -465,6 +477,13 @@ class AsoDesignerApp:
         row += 1
         self.backbone_combo = self._combo(left, row, "Backbone Modification", "backbone_modification", ["PS", "PO", "MIXED", "None"], "PS")
         row += 1
+        self.variant_methyl_c_gap_check = ttk.Checkbutton(
+            left,
+            text="5MeC on C bases in DNA gap",
+            variable=self.variant_methyl_c_gap,
+        )
+        self.variant_methyl_c_gap_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
+        row += 1
 
         ttk.Separator(left).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
         row += 1
@@ -615,6 +634,14 @@ class AsoDesignerApp:
         self._var("chemopt_wing_chemistry", "MOE")
         self._var("chemopt_backbone_modification", "PS")
         self._var("chemopt_step_size", "1")
+        self.chemopt_methyl_c_gap_check = ttk.Checkbutton(
+            left,
+            text="5MeC on C bases in DNA gap",
+            variable=self.chemopt_methyl_c_gap,
+            command=self._on_chemopt_methyl_c_gap_changed,
+        )
+        self.chemopt_methyl_c_gap_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(4, 3))
+        row += 1
         self.chemopt_custom_button = ttk.Button(
             left,
             text="Select Chemistry and Walk Motif",
@@ -794,6 +821,13 @@ class AsoDesignerApp:
             "PS",
         )
         row += 1
+        self.converter_methyl_c_gap_check = ttk.Checkbutton(
+            left,
+            text="5MeC on C bases in DNA gap",
+            variable=self.converter_methyl_c_gap,
+        )
+        self.converter_methyl_c_gap_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
+        row += 1
 
         ttk.Separator(left).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
         row += 1
@@ -931,6 +965,13 @@ class AsoDesignerApp:
             ["PS", "PO", "MIXED", "None"],
             "PS",
         )
+        row += 1
+        self.penalty_methyl_c_gap_check = ttk.Checkbutton(
+            left,
+            text="5MeC on C bases in DNA gap",
+            variable=self.penalty_methyl_c_gap,
+        )
+        self.penalty_methyl_c_gap_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
         row += 1
 
         ttk.Separator(left).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
@@ -1167,6 +1208,7 @@ class AsoDesignerApp:
                 int(self.vars["wing_length"].get()),
                 self.vars["wing_chemistry"].get(),
                 self.vars["backbone_modification"].get(),
+                methyl_c=bool(self.variant_methyl_c_gap.get()),
             )
         except Exception:
             base_mods, linkages = build_gapmer_pattern(12, 3, "LNA", "PS")
@@ -1547,6 +1589,7 @@ class AsoDesignerApp:
             self.vars["wing_length"].set(str(preset["wing_length"]))
             self.vars["wing_chemistry"].set(str(preset["wing_chemistry"]))
             self.vars["backbone_modification"].set(str(preset["backbone_modification"]))
+            self.variant_methyl_c_gap.set(bool(preset.get("methyl_c", False)))
             self.custom_base_modifications = ()
             self.custom_linkages = ()
         state = "disabled"
@@ -1555,6 +1598,7 @@ class AsoDesignerApp:
         self.wing_entry.configure(state=state)
         self.wing_combo.configure(state=combo_state)
         self.backbone_combo.configure(state=combo_state)
+        self.variant_methyl_c_gap_check.configure(state="disabled" if custom else "normal")
         self.custom_button.configure(state="normal" if custom else "disabled")
 
     def _initial_chemopt_pattern(self) -> tuple[list[str], list[str]]:
@@ -1608,7 +1652,7 @@ class AsoDesignerApp:
                 int(preset["wing_length"]),
                 str(preset["wing_chemistry"]),
                 str(preset["backbone_modification"]),
-                methyl_c=bool(preset.get("methyl_c", False)),
+                methyl_c=bool(self.chemopt_methyl_c_gap.get()),
                 linkage_pattern=str(preset.get("linkage_pattern", "")),
             )
         except Exception:
@@ -1628,6 +1672,9 @@ class AsoDesignerApp:
         self.vars["chemopt_wing_length"].set(str(wing_length))
         self.vars["chemopt_wing_chemistry"].set(str(wing_chemistry))
         self.vars["chemopt_backbone_modification"].set(str(backbone_modification))
+        if label in CHEMISTRY_PRESETS:
+            preset = CHEMISTRY_PRESETS[label]
+            self.chemopt_methyl_c_gap.set(bool(preset.get("methyl_c", False)) if preset is not None else False)
 
     def _open_chemopt_chemistry_editor(self) -> None:
         self._open_custom_chemistry_editor(
@@ -1671,6 +1718,11 @@ class AsoDesignerApp:
             wing_length=int(self.vars["chemopt_wing_length"].get()),
             wing_chemistry=self.vars["chemopt_wing_chemistry"].get(),
             backbone_modification=self.vars["chemopt_backbone_modification"].get(),
+            methyl_c_gap=(
+                bool(self.chemopt_methyl_c_gap.get())
+                if self.vars["chemopt_aso_chemistry"].get() != "Custom"
+                else None
+            ),
             custom_base_modifications=(
                 self.chemopt_base_modifications if self.vars["chemopt_aso_chemistry"].get() == "Custom" else ()
             ),
@@ -1683,11 +1735,12 @@ class AsoDesignerApp:
         wing_len = int(self.vars["chemopt_wing_length"].get())
         gap_len = int(self.vars["chemopt_gap_length"].get())
         if self.chemopt_base_modifications:
-            base_mods = self.chemopt_base_modifications
+            base_mods = self._chemopt_base_modifications_with_methyl_toggle()
             linkages = self.chemopt_linkages
+            methyl_text = ", 5MeC in DNA gap" if self.chemopt_methyl_c_gap.get() else ""
             label = (
                 f"{self.vars['chemopt_aso_chemistry'].get()}, edited chemistry walk pattern, "
-                f"{summarise_linkages(linkages)} backbone modification"
+                f"{summarise_linkages(linkages)} backbone modification{methyl_text}"
             )
             return label, base_mods, linkages, wing_len, gap_len
 
@@ -1717,6 +1770,22 @@ class AsoDesignerApp:
         self.chemopt_motif_status.configure(
             text=f"Walk motif: ASO positions {self._format_position_tuple(aso_positions)}{gap_text}"
         )
+
+    def _chemopt_base_modifications_with_methyl_toggle(self) -> tuple[str, ...]:
+        try:
+            return set_dna_gap_methylation(
+                self.chemopt_base_modifications,
+                int(self.vars["chemopt_wing_length"].get()),
+                int(self.vars["chemopt_gap_length"].get()),
+                bool(self.chemopt_methyl_c_gap.get()),
+            )
+        except Exception:
+            return self.chemopt_base_modifications
+
+    def _on_chemopt_methyl_c_gap_changed(self) -> None:
+        if self.chemopt_base_modifications:
+            self.chemopt_base_modifications = self._chemopt_base_modifications_with_methyl_toggle()
+            self.last_chemopt_rows = ()
 
     def generate_chemistry_optimization(self) -> None:
         try:
@@ -2158,6 +2227,7 @@ class AsoDesignerApp:
                 int(self.vars["converter_wing_length"].get()),
                 self.vars["converter_wing_chemistry"].get(),
                 self.vars["converter_backbone_modification"].get(),
+                methyl_c=bool(self.converter_methyl_c_gap.get()),
             )
         except Exception:
             base_mods, linkages = build_gapmer_pattern(12, 3, "LNA", "PS")
@@ -2203,6 +2273,7 @@ class AsoDesignerApp:
             self.vars["converter_wing_length"].set(str(preset["wing_length"]))
             self.vars["converter_wing_chemistry"].set(str(preset["wing_chemistry"]))
             self.vars["converter_backbone_modification"].set(str(preset["backbone_modification"]))
+            self.converter_methyl_c_gap.set(bool(preset.get("methyl_c", False)))
             self.converter_custom_base_modifications = ()
             self.converter_custom_linkages = ()
         state = "disabled"
@@ -2211,6 +2282,7 @@ class AsoDesignerApp:
         self.converter_wing_entry.configure(state=state)
         self.converter_wing_combo.configure(state=combo_state)
         self.converter_backbone_combo.configure(state=combo_state)
+        self.converter_methyl_c_gap_check.configure(state="disabled" if custom else "normal")
         self.converter_custom_button.configure(state="normal" if custom else "disabled")
 
     def _collect_converter_chemistry_inputs(self) -> AsoInputs:
@@ -2220,6 +2292,11 @@ class AsoDesignerApp:
             wing_length=int(self.vars["converter_wing_length"].get()),
             wing_chemistry=self.vars["converter_wing_chemistry"].get(),
             backbone_modification=self.vars["converter_backbone_modification"].get(),
+            methyl_c_gap=(
+                bool(self.converter_methyl_c_gap.get())
+                if self.vars["converter_aso_chemistry"].get() != "Custom"
+                else None
+            ),
             custom_base_modifications=(
                 self.converter_custom_base_modifications
                 if self.vars["converter_aso_chemistry"].get() == "Custom"
@@ -2336,6 +2413,7 @@ class AsoDesignerApp:
                 int(self.vars["penalty_wing_length"].get()),
                 self.vars["penalty_wing_chemistry"].get(),
                 self.vars["penalty_backbone_modification"].get(),
+                methyl_c=bool(self.penalty_methyl_c_gap.get()),
             )
         except Exception:
             base_mods, linkages = build_gapmer_pattern(12, 3, "LNA", "PS")
@@ -2383,6 +2461,7 @@ class AsoDesignerApp:
             self.vars["penalty_wing_length"].set(str(preset["wing_length"]))
             self.vars["penalty_wing_chemistry"].set(str(preset["wing_chemistry"]))
             self.vars["penalty_backbone_modification"].set(str(preset["backbone_modification"]))
+            self.penalty_methyl_c_gap.set(bool(preset.get("methyl_c", False)))
             self.penalty_custom_base_modifications = ()
             self.penalty_custom_linkages = ()
         state = "disabled"
@@ -2391,6 +2470,7 @@ class AsoDesignerApp:
         self.penalty_wing_entry.configure(state=state)
         self.penalty_wing_combo.configure(state=combo_state)
         self.penalty_backbone_combo.configure(state=combo_state)
+        self.penalty_methyl_c_gap_check.configure(state="disabled" if custom else "normal")
         self.penalty_custom_button.configure(state="normal" if custom else "disabled")
 
     def _collect_penalty_inputs(self) -> PenaltyAsoInputs:
@@ -2403,6 +2483,11 @@ class AsoDesignerApp:
             wing_length=int(self.vars["penalty_wing_length"].get()),
             wing_chemistry=self.vars["penalty_wing_chemistry"].get(),
             backbone_modification=self.vars["penalty_backbone_modification"].get(),
+            methyl_c_gap=(
+                bool(self.penalty_methyl_c_gap.get())
+                if self.vars["penalty_aso_chemistry"].get() != "Custom"
+                else None
+            ),
             custom_base_modifications=(
                 self.penalty_custom_base_modifications
                 if self.vars["penalty_aso_chemistry"].get() == "Custom"
@@ -2543,6 +2628,11 @@ class AsoDesignerApp:
             wing_length=int(self.vars["wing_length"].get()),
             wing_chemistry=self.vars["wing_chemistry"].get(),
             backbone_modification=self.vars["backbone_modification"].get(),
+            methyl_c_gap=(
+                bool(self.variant_methyl_c_gap.get())
+                if self.vars["aso_chemistry"].get() != "Custom"
+                else None
+            ),
             custom_base_modifications=(
                 self.custom_base_modifications if self.vars["aso_chemistry"].get() == "Custom" else ()
             ),
