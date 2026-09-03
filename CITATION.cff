@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+title: ASO Designer
+message: If you use this software, please cite the repository or archived release.
+type: software
+authors:
+  - family-names: Apkarian
+    given-names: Alexander
+repository-code: https://github.com/AlexanderApkarian/ASO-Designer
+date-released: 2026-09-03

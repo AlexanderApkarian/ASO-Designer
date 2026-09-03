@@ -45,9 +45,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Design ASO microwalks and export IDT order codes.")
     parser.add_argument("--export", help="Write an .xlsx result workbook instead of opening the GUI.")
     parser.add_argument("--example", action="store_true", help="Use a small built-in example input.")
-    parser.add_argument("--target-gene", default="")
-    parser.add_argument("--snp-identifier", default="")
-    parser.add_argument("--chemistry-number", default="")
+    parser.add_argument("--identifier-1", "--target-gene", dest="target_gene", default="")
+    parser.add_argument("--identifier-2", "--snp-identifier", dest="snp_identifier", default="")
+    parser.add_argument("--identifier-3", "--chemistry-number", dest="chemistry_number", default="")
     parser.add_argument("--aso-chemistry", default=DEFAULT_CHEMISTRY, choices=list(CHEMISTRY_PRESETS))
     parser.add_argument("--gap-length", type=int, default=12)
     parser.add_argument("--wing-length", type=int, default=3)
@@ -59,10 +59,22 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="Turn 5MeC on or off for C bases in the central DNA gap.",
     )
-    parser.add_argument("--mutation-type", default="Insertion", choices=["Insertion", "Deletion", "Substitution"])
-    parser.add_argument("--mutation-length", type=int, default=1)
-    parser.add_argument("--mutation-start", type=int, default=22)
-    parser.add_argument("--microwalk-step-size", type=int, default=1)
+    parser.add_argument(
+        "--variant-type",
+        "--mutation-type",
+        dest="mutation_type",
+        default="Insertion",
+        choices=["Insertion", "Deletion", "Substitution"],
+    )
+    parser.add_argument("--variant-length", "--mutation-length", dest="mutation_length", type=int, default=1)
+    parser.add_argument("--variant-start", "--mutation-start", dest="mutation_start", type=int, default=22)
+    parser.add_argument(
+        "--step-size",
+        "--microwalk-step-size",
+        dest="microwalk_step_size",
+        type=int,
+        default=1,
+    )
     parser.add_argument("--rna-sequence", default="")
     parser.add_argument("--rna-file", help="Read the RNA sequence from a text file.")
     return parser.parse_args(argv)

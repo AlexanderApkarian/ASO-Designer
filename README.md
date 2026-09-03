@@ -41,19 +41,19 @@ Enter the sequence and inputs, click **Calculate**, then **Export Excel**.
 ```bash
 python3 aso_designer.py \
   --export aso_output.xlsx \
-  --target-gene GENE \
-  --snp-identifier Example \
-  --chemistry-number C1 \
-  --mutation-type Insertion \
-  --mutation-length 1 \
-  --mutation-start 22 \
+  --identifier-1 GENE \
+  --identifier-2 Variant \
+  --identifier-3 C1 \
+  --variant-type Insertion \
+  --variant-length 1 \
+  --variant-start 22 \
   --rna-sequence AUGCUACGUAUGCUACGUAUGGCAUCGUAUGCUACGUAUGCUACGUA
 ```
 
 For long sequences, put the RNA in a text file and use:
 
 ```bash
-python3 aso_designer.py --export aso_output.xlsx --rna-file sequence.txt --mutation-type Deletion --mutation-length 4 --mutation-start 22
+python3 aso_designer.py --export aso_output.xlsx --rna-file sequence.txt --variant-type Deletion --variant-length 4 --variant-start 22
 ```
 
 ## Notes
