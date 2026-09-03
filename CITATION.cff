@@ -5,5 +5,7 @@ type: software
 authors:
   - family-names: Apkarian
     given-names: Alexander
+  - family-names: Hill
+    given-names: Alyssa
 repository-code: https://github.com/AlexanderApkarian/ASO-Designer
 date-released: 2026-09-03
