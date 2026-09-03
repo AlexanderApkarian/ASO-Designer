@@ -613,30 +613,6 @@ def build_gapmer_pattern(
     return base_modifications, tuple([linkage] * (len(base_modifications) - 1))
 
 
-def set_dna_gap_methylation(
-    base_modifications: tuple[str, ...] | list[str],
-    wing_length: int,
-    gap_length: int,
-    methyl_c: bool,
-) -> tuple[str, ...]:
-    mods = [normalise_base_modification(modification) for modification in base_modifications]
-    if any(not modification for modification in mods):
-        raise AsoInputError("Base modifications include an unrecognised option.")
-
-    wing_len = int(wing_length)
-    gap_len = int(gap_length)
-    if wing_len < 0 or gap_len < 0:
-        raise AsoInputError("Gap length and wing length must be non-negative.")
-    if wing_len * 2 + gap_len != len(mods):
-        return tuple(mods)
-
-    for index in range(wing_len, wing_len + gap_len):
-        ribose_mod, _base_mod = split_base_modification(mods[index])
-        if ribose_mod == "DNA":
-            mods[index] = combine_base_modification("DNA", "5MeC" if methyl_c else "None")
-    return tuple(mods)
-
-
 def validate_base_sequence(seq: str) -> None:
     bad = sorted({b for b in seq.upper() if b not in "ACGTU"})
     if bad:

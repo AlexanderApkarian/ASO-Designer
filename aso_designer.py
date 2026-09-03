@@ -27,7 +27,6 @@ from aso_logic import (
     resolve_chemistry,
     mutation_header_indexes,
     normalise_mutation_type,
-    set_dna_gap_methylation,
     split_base_modification,
     summarise_linkages,
     variant_warning_text,
@@ -123,7 +122,6 @@ class AsoDesignerApp:
         self.variant_methyl_c_gap = tk.BooleanVar(value=False)
         self.converter_methyl_c_gap = tk.BooleanVar(value=False)
         self.penalty_methyl_c_gap = tk.BooleanVar(value=False)
-        self.chemopt_methyl_c_gap = tk.BooleanVar(value=False)
         self.custom_base_modifications: tuple[str, ...] = ()
         self.custom_linkages: tuple[str, ...] = ()
         self.converter_custom_base_modifications: tuple[str, ...] = ()
@@ -1233,8 +1231,6 @@ class AsoDesignerApp:
         initial_motif_positions: tuple[int, ...] = (),
         require_custom: bool = True,
         template_callback=None,
-        methyl_c_gap_var=None,
-        methyl_c_gap_dimensions_func=None,
     ) -> None:
         if require_custom and self.vars[chemistry_var_name].get() != "Custom":
             return
@@ -1269,16 +1265,13 @@ class AsoDesignerApp:
 
         top = ttk.Frame(win, padding=(12, 12, 12, 6))
         top.grid(row=0, column=0, sticky="ew")
-        top.columnconfigure(12, weight=1)
+        top.columnconfigure(11, weight=1)
 
         length_var = tk.StringVar(value=str(len(base_mods)))
         ribose_tool = tk.StringVar(value="DNA")
         nucleobase_tool = tk.StringVar(value="None")
         linkage_tool = tk.StringVar(value="PS")
         motif_mode = tk.BooleanVar(value=False)
-        methyl_c_gap_tool = (
-            tk.BooleanVar(value=bool(methyl_c_gap_var.get())) if methyl_c_gap_var is not None else None
-        )
         motif_positions = set(int(position) for position in initial_motif_positions)
         template_metadata = None
 
@@ -1308,13 +1301,6 @@ class AsoDesignerApp:
                 sticky="w",
                 padx=(18, 0),
             )
-            if methyl_c_gap_var is not None:
-                ttk.Checkbutton(
-                    top,
-                    text="5MeC on C bases in DNA gap",
-                    variable=methyl_c_gap_tool,
-                    command=lambda: apply_methyl_c_gap_to_current_pattern(),
-                ).grid(row=0, column=9, sticky="w", padx=(18, 0))
             instruction = (
                 "Choose ribose, base, or linkage options, then click circles or diamonds to edit the starting chemistry. "
                 "Turn on Select walk motif, then click the core bases that should slide along the central gap."
@@ -1383,26 +1369,6 @@ class AsoDesignerApp:
             if template_metadata is not None:
                 template_metadata["label"] = "Custom"
 
-        def current_gap_dimensions() -> tuple[int, int]:
-            if template_metadata is not None:
-                return int(template_metadata["wing_length"]), int(template_metadata["gap_length"])
-            if methyl_c_gap_dimensions_func is not None:
-                try:
-                    wing_len, gap_len = methyl_c_gap_dimensions_func()
-                    return int(wing_len), int(gap_len)
-                except Exception:
-                    pass
-            return 0, len(base_mods)
-
-        def apply_methyl_c_gap_to_current_pattern(redraw: bool = True) -> None:
-            nonlocal base_mods
-            if methyl_c_gap_tool is None:
-                return
-            wing_len, gap_len = current_gap_dimensions()
-            base_mods = list(set_dna_gap_methylation(base_mods, wing_len, gap_len, bool(methyl_c_gap_tool.get())))
-            if redraw:
-                draw()
-
         def resize_from_length(*_args) -> None:
             nonlocal template_metadata
             try:
@@ -1424,14 +1390,11 @@ class AsoDesignerApp:
                     "wing_chemistry": "Custom",
                     "backbone_modification": summarise_linkages(tuple(linkages)),
                 }
-            apply_methyl_c_gap_to_current_pattern(redraw=False)
             length_var.set(str(len(base_mods)))
             draw()
 
         def set_gapmer(label: str, gap: int, wing: int, wing_chemistry: str, backbone: str, **kwargs) -> None:
             nonlocal base_mods, linkages, template_metadata
-            if methyl_c_gap_tool is not None:
-                methyl_c_gap_tool.set(bool(kwargs.get("methyl_c", False)))
             base_tuple, linkage_tuple = build_gapmer_pattern(gap, wing, wing_chemistry, backbone, **kwargs)
             base_mods = list(base_tuple)
             linkages = list(linkage_tuple)
@@ -1448,8 +1411,6 @@ class AsoDesignerApp:
 
         def set_all(label: str, base_mod: str, linkage: str) -> None:
             nonlocal base_mods, linkages, template_metadata
-            if methyl_c_gap_tool is not None:
-                methyl_c_gap_tool.set(False)
             try:
                 length = max(1, min(80, int(length_var.get())))
             except Exception:
@@ -1585,9 +1546,6 @@ class AsoDesignerApp:
             draw()
 
         def apply_pattern() -> None:
-            apply_methyl_c_gap_to_current_pattern(redraw=False)
-            if methyl_c_gap_var is not None and methyl_c_gap_tool is not None:
-                methyl_c_gap_var.set(bool(methyl_c_gap_tool.get()))
             if template_callback is not None and template_metadata is not None:
                 template_callback(**template_metadata)
             if allow_motif_selection:
@@ -1684,7 +1642,7 @@ class AsoDesignerApp:
                 int(preset["wing_length"]),
                 str(preset["wing_chemistry"]),
                 str(preset["backbone_modification"]),
-                methyl_c=bool(self.chemopt_methyl_c_gap.get()),
+                methyl_c=bool(preset.get("methyl_c", False)),
                 linkage_pattern=str(preset.get("linkage_pattern", "")),
             )
         except Exception:
@@ -1716,11 +1674,6 @@ class AsoDesignerApp:
             initial_motif_positions=self.chemopt_motif_positions,
             require_custom=False,
             template_callback=self._set_chemopt_template_metadata,
-            methyl_c_gap_var=self.chemopt_methyl_c_gap,
-            methyl_c_gap_dimensions_func=lambda: (
-                int(self.vars["chemopt_wing_length"].get()),
-                int(self.vars["chemopt_gap_length"].get()),
-            ),
         )
 
     def _on_chemopt_chemistry_changed(self) -> None:
@@ -1738,7 +1691,6 @@ class AsoDesignerApp:
             self.vars["chemopt_wing_length"].set(str(preset["wing_length"]))
             self.vars["chemopt_wing_chemistry"].set(str(preset["wing_chemistry"]))
             self.vars["chemopt_backbone_modification"].set(str(preset["backbone_modification"]))
-            self.chemopt_methyl_c_gap.set(bool(preset.get("methyl_c", False)))
             self.chemopt_base_modifications = ()
             self.chemopt_linkages = ()
             self.chemopt_motif_positions = ()
@@ -1753,11 +1705,6 @@ class AsoDesignerApp:
             wing_length=int(self.vars["chemopt_wing_length"].get()),
             wing_chemistry=self.vars["chemopt_wing_chemistry"].get(),
             backbone_modification=self.vars["chemopt_backbone_modification"].get(),
-            methyl_c_gap=(
-                bool(self.chemopt_methyl_c_gap.get())
-                if self.vars["chemopt_aso_chemistry"].get() != "Custom"
-                else None
-            ),
             custom_base_modifications=(
                 self.chemopt_base_modifications if self.vars["chemopt_aso_chemistry"].get() == "Custom" else ()
             ),
@@ -1770,12 +1717,11 @@ class AsoDesignerApp:
         wing_len = int(self.vars["chemopt_wing_length"].get())
         gap_len = int(self.vars["chemopt_gap_length"].get())
         if self.chemopt_base_modifications:
-            base_mods = self._chemopt_base_modifications_with_methyl_toggle()
+            base_mods = self.chemopt_base_modifications
             linkages = self.chemopt_linkages
-            methyl_text = ", 5MeC in DNA gap" if self.chemopt_methyl_c_gap.get() else ""
             label = (
                 f"{self.vars['chemopt_aso_chemistry'].get()}, edited chemistry walk pattern, "
-                f"{summarise_linkages(linkages)} backbone modification{methyl_text}"
+                f"{summarise_linkages(linkages)} backbone modification"
             )
             return label, base_mods, linkages, wing_len, gap_len
 
@@ -1805,22 +1751,6 @@ class AsoDesignerApp:
         self.chemopt_motif_status.configure(
             text=f"Walk motif: ASO positions {self._format_position_tuple(aso_positions)}{gap_text}"
         )
-
-    def _chemopt_base_modifications_with_methyl_toggle(self) -> tuple[str, ...]:
-        try:
-            return set_dna_gap_methylation(
-                self.chemopt_base_modifications,
-                int(self.vars["chemopt_wing_length"].get()),
-                int(self.vars["chemopt_gap_length"].get()),
-                bool(self.chemopt_methyl_c_gap.get()),
-            )
-        except Exception:
-            return self.chemopt_base_modifications
-
-    def _on_chemopt_methyl_c_gap_changed(self) -> None:
-        if self.chemopt_base_modifications:
-            self.chemopt_base_modifications = self._chemopt_base_modifications_with_methyl_toggle()
-            self.last_chemopt_rows = ()
 
     def generate_chemistry_optimization(self) -> None:
         try:
